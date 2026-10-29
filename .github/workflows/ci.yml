@@ -11,10 +11,6 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
@@ -25,6 +21,10 @@ env:
 jobs:
   test:
     name: Tests (SQL Server)
+    # A newer push to the same branch cancels this; it has no side effects worth finishing.
+    concurrency:
+      group: test-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -62,6 +62,9 @@ jobs:
 
   web:
     name: Web build
+    concurrency:
+      group: web-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -81,6 +84,9 @@ jobs:
 
   container:
     name: Docker image smoke test
+    concurrency:
+      group: container-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -125,6 +131,9 @@ jobs:
   # Only a main that passed everything above gets an image: tagged with the commit and as latest.
   publish:
     name: Publish image
+    concurrency:
+      group: publish-${{ github.ref }}
+      cancel-in-progress: true
     needs: [test, web, container]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -155,6 +164,11 @@ jobs:
   # the production environment, which only main may deploy to, and the role covers one resource group.
   deploy:
     name: Deploy to Azure
+    # Deployments run one at a time and never get cancelled: a newer one waits until this one has rolled out
+    # and been verified. (Only the newest waiting deployment is kept.)
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 15

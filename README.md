@@ -133,6 +133,9 @@ GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every p
 | **Publish image** | after all three pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
 | **Deploy to Azure** | after publishing: rolls the image out to Container Apps via OIDC and checks the new revision serves it |
 
+A newer push cancels the checks still running for an older one, but never a deployment: deployments run one at a
+time and always finish, including their verification.
+
 The load tests run only on demand: Actions → CI → **Run workflow** with **Run load tests** ticked, or
 `gh workflow run ci.yml -f load_tests=true`.
 
