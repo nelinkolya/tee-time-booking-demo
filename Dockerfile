@@ -12,7 +12,11 @@ WORKDIR /src
 COPY TeeTimeBooking.Api/TeeTimeBooking.Api.csproj TeeTimeBooking.Api/
 RUN dotnet restore TeeTimeBooking.Api/TeeTimeBooking.Api.csproj
 COPY TeeTimeBooking.Api/ TeeTimeBooking.Api/
-RUN dotnet publish TeeTimeBooking.Api/TeeTimeBooking.Api.csproj -c Release -o /app --no-restore -p:UseAppHost=false
+# Declared here, after restore, so a new commit does not invalidate the restore layer.
+ARG GIT_SHA=""
+ARG BUILD_TIMESTAMP=""
+RUN dotnet publish TeeTimeBooking.Api/TeeTimeBooking.Api.csproj -c Release -o /app --no-restore -p:UseAppHost=false \
+    -p:SourceRevisionId="$GIT_SHA" -p:BuildTimestamp="$BUILD_TIMESTAMP"
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

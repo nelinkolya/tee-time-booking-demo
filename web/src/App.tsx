@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { book, cancel, getBookings, getTeeTimes, resetDemo, type BookAttempt, type Booking, type TeeTime } from "./api";
+import { book, cancel, getBookings, getTeeTimes, getVersion, resetDemo, type AppVersion, type BookAttempt, type Booking, type TeeTime } from "./api";
 
 const today = () => new Date().toLocaleDateString("sv-SE"); // yyyy-MM-dd in local time
 const time = (iso: string) => iso.slice(11, 16);
@@ -141,7 +141,37 @@ export function App() {
           </ol>
         </section>
       </main>
+
+      <VersionFooter />
     </div>
+  );
+}
+
+const repoUrl = "https://github.com/nelinkolya/tee-time-booking-demo";
+
+function VersionFooter() {
+  const [version, setVersion] = useState<AppVersion>();
+  useEffect(() => {
+    getVersion().then(setVersion, () => undefined);
+  }, []);
+  if (!version) return null;
+
+  const commit = version.commit?.slice(0, 7);
+  const built = version.builtAtUtc && new Date(version.builtAtUtc).toISOString().slice(0, 16).replace("T", " ");
+  return (
+    <footer className="version">
+      v{version.version}
+      {commit && (
+        <>
+          {" · "}
+          <a href={`${repoUrl}/commit/${version.commit}`} target="_blank" rel="noreferrer" title={version.commit ?? undefined}>
+            {commit}
+          </a>
+        </>
+      )}
+      {built && ` · built ${built} UTC`}
+      {` · ${version.environment}`}
+    </footer>
   );
 }
 

@@ -56,3 +56,16 @@ export async function cancel(bookingId: string): Promise<void> {
 export async function resetDemo(): Promise<void> {
   await fetch("/api/demo/reset", { method: "POST" });
 }
+
+export interface AppVersion {
+  version: string;
+  commit: string | null;
+  builtAtUtc: string | null;
+  environment: string;
+}
+
+export async function getVersion(): Promise<AppVersion> {
+  const res = await fetch("/api/version");
+  if (!res.ok) throw new Error(`Loading version failed: ${res.status}`);
+  return res.json();
+}

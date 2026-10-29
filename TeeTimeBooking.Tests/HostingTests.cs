@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Json;
+using TeeTimeBooking.Api;
 
 namespace TeeTimeBooking.Tests;
 
@@ -12,6 +14,15 @@ public class HostingTests(ApiFixture api)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Version_reports_the_release_and_the_environment()
+    {
+        var version = await api.CreateClient().GetFromJsonAsync<VersionDto>("/api/version");
+
+        Assert.Equal("1.0.0", version!.Version);
+        Assert.Equal("Testing", version.Environment);
     }
 
     [Fact]

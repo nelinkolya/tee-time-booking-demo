@@ -5,7 +5,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>teetime-booking-demo</UserSecretsId>
+    <Version>1.0.0</Version>
+    <!-- The SDK appends the commit to InformationalVersion: from .git locally, from SourceRevisionId in Docker. -->
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(BuildTimestamp)' != ''">
+    <AssemblyMetadata Include="BuildTimestamp" Value="$(BuildTimestamp)" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- The OpenAPI document is built in (Microsoft.AspNetCore.OpenApi); Swagger UI only renders it. -->

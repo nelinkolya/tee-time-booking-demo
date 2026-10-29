@@ -80,7 +80,10 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build image
-        run: docker build --tag teetime-booking:ci .
+        run: >
+          docker build --tag teetime-booking:ci
+          --build-arg GIT_SHA=${{ github.sha }}
+          --build-arg BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ) .
 
       - name: Start SQL Server
         run: bash .github/scripts/start-sqlserver.sh
@@ -104,6 +107,7 @@ jobs:
           curl --silent --fail http://localhost:8080/health | grep -q Healthy
           curl --silent --fail http://localhost:8080/ | grep -q '<div id="root">'
           curl --silent --fail http://localhost:8080/api/tee-times | grep -q '"course"'
+          curl --silent --fail http://localhost:8080/api/version | grep -q '"commit":"${{ github.sha }}"'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST http://localhost:8080/api/demo/reset)" = 404
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/openapi/v1.json)" = 404
 
@@ -132,6 +136,8 @@ jobs:
       - name: Build and push
         run: |
           docker build \
+            --build-arg GIT_SHA=${{ github.sha }} \
+            --build-arg BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
             --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
             --label "org.opencontainers.image.revision=${{ github.sha }}" \
             --tag "$IMAGE:${{ github.sha }}" --tag "$IMAGE:latest" .

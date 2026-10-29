@@ -6,6 +6,7 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using TeeTimeBooking.Api;
 using TeeTimeBooking.Api.Bookings;
 using TeeTimeBooking.Api.Data;
 using TeeTimeBooking.Api.Observability;
@@ -28,7 +29,7 @@ builder.Services.AddSingleton<BookingTelemetry>();
 builder.Services.AddScoped<BookingService>();
 
 var otel = builder.Services.AddOpenTelemetry()
-    .ConfigureResource(r => r.AddService("TeeTimeBooking.Api"))
+    .ConfigureResource(r => r.AddService("TeeTimeBooking.Api", serviceVersion: AppVersion.Display))
     .WithTracing(t => t
         .AddSource(BookingTelemetry.Name)
         .AddAspNetCoreInstrumentation(o => o.Filter = http => http.Request.Path.StartsWithSegments("/api"))
@@ -82,6 +83,10 @@ app.UseStatusCodePages();
 
 app.MapBookingEndpoints();
 app.MapHealthChecks("/health");
+app.MapGet("/api/version", (IHostEnvironment env) =>
+        TypedResults.Ok(new VersionDto(AppVersion.Version, AppVersion.Commit, AppVersion.BuiltAtUtc, env.EnvironmentName)))
+    .WithTags("Meta")
+    .WithSummary("The running version: release, commit and build time");
 
 // The built UI in wwwroot (in the container); a wrong /api URL stays a 404 instead of falling back to it.
 app.UseStaticFiles();
