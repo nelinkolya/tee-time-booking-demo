@@ -116,12 +116,14 @@ to zero and the database auto-pauses, so the first request after a quiet spell c
 | Database login | the app's **managed identity** — no password anywhere; the SQL server accepts Entra authentication only |
 | Telemetry | Application Insights via the OpenTelemetry Azure Monitor exporter (`APPLICATIONINSIGHTS_CONNECTION_STRING`) |
 
-CI publishes an image for every `main` that passes; it is then rolled out with
-`az containerapp update --image ghcr.io/nelinkolya/tee-time-booking-demo:<sha>`.
+Every `main` that passes CI is deployed automatically: the image is published, the container app is updated to
+it, and the job waits until the new revision is ready and serving that exact image. GitHub signs in to Azure with
+**OIDC** — the federated credential trusts only this repository's `main`, the role is Contributor on one resource
+group, and no secret is stored in GitHub.
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every pull request — four jobs:
+GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every pull request — five jobs:
 
 | Job | What it proves |
 |---|---|
@@ -129,6 +131,7 @@ GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every p
 | **Web build** | the React app type-checks and builds from the lockfile |
 | **Docker image smoke test** | the image builds from the `Dockerfile`, runs in Production against SQL Server, migrates, reports `/health` healthy, serves the UI and the API, and leaves out the demo reset and the API docs |
 | **Publish image** | after all three pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
+| **Deploy to Azure** | after publishing: rolls the image out to Container Apps via OIDC and checks the new revision serves it |
 
 The SQL Server `sa` password is generated per run, masked in the log, and never stored in the repository
 (`.github/scripts/start-sqlserver.sh`).

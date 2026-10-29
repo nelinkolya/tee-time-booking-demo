@@ -137,3 +137,44 @@ jobs:
             --tag "$IMAGE:${{ github.sha }}" --tag "$IMAGE:latest" .
           docker push "$IMAGE:${{ github.sha }}"
           docker push "$IMAGE:latest"
+
+  # Rolls the commit's image out to Azure Container Apps. Signs in with OIDC: the federated credential trusts
+  # only this repository's main branch, and the role is limited to one resource group, so no secret is stored.
+  deploy:
+    name: Deploy to Azure
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://teetime-booking.yellowrock-3c024f16.swedencentral.azurecontainerapps.io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Update the container app
+        run: >
+          az containerapp update --resource-group rg-teetime-demo --name teetime-booking
+          --image ghcr.io/${{ github.repository }}:${{ github.sha }} --output none
+
+      - name: Wait until the new revision is ready and serving
+        run: |
+          app="--resource-group rg-teetime-demo --name teetime-booking"
+          for attempt in $(seq 1 30); do
+            latest=$(az containerapp show $app --query properties.latestRevisionName -o tsv)
+            ready=$(az containerapp show $app --query properties.latestReadyRevisionName -o tsv)
+            if [ "$latest" = "$ready" ]; then break; fi
+            sleep 10
+          done
+          image=$(az containerapp revision show $app --revision "$latest" --query "properties.template.containers[0].image" -o tsv)
+          echo "revision $latest ready=$ready image=$image"
+          test "$latest" = "$ready"
+          test "$image" = "ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          curl --silent --fail --max-time 90 \
+            https://teetime-booking.yellowrock-3c024f16.swedencentral.azurecontainerapps.io/health | grep -q Healthy
