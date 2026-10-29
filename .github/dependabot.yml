@@ -23,3 +23,7 @@ updates:
   - package-ecosystem: docker
     directory: /
     schedule: { interval: weekly, day: monday }
+    ignore:
+      # Odd-numbered Node releases never become LTS; move between LTS majors by hand.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
