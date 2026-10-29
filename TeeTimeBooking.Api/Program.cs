@@ -1,4 +1,5 @@
 using Azure.Monitor.OpenTelemetry.Exporter;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using OpenTelemetry;
@@ -82,7 +83,10 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 
 app.MapBookingEndpoints();
+// Readiness (and the general health check): the database must answer.
 app.MapHealthChecks("/health");
+// Liveness: the process answers, no dependencies — a database outage must not get containers restarted.
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapGet("/api/version", (IHostEnvironment env) =>
         TypedResults.Ok(new VersionDto(AppVersion.Version, AppVersion.Commit, AppVersion.BuiltAtUtc, env.EnvironmentName)))
     .WithTags("Meta")

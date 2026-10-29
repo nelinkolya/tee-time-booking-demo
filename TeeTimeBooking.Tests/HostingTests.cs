@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
 using TeeTimeBooking.Api;
 
 namespace TeeTimeBooking.Tests;
@@ -14,6 +15,20 @@ public class HostingTests(ApiFixture api)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Liveness_does_not_depend_on_the_database()
+    {
+        var unreachableDb = api.WithWebHostBuilder(b => b.UseSetting(
+            "ConnectionStrings:TeeTimes", "Server=tcp:127.0.0.1,1;Database=TeeTimeBooking_Test;Connect Timeout=1;TrustServerCertificate=True"));
+        var client = unreachableDb.CreateClient();
+
+        var live = await client.GetAsync("/health/live");
+        var ready = await client.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
     }
 
     [Fact]

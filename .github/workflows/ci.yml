@@ -118,6 +118,7 @@ jobs:
           done
           set -x
           curl --silent --fail http://localhost:8080/health | grep -q Healthy
+          curl --silent --fail http://localhost:8080/health/live | grep -q Healthy
           curl --silent --fail http://localhost:8080/ | grep -q '<div id="root">'
           curl --silent --fail http://localhost:8080/api/tee-times | grep -q '"course"'
           curl --silent --fail http://localhost:8080/api/version | grep -q '"commit":"${{ github.sha }}"'
