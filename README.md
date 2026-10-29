@@ -118,8 +118,8 @@ to zero and the database auto-pauses, so the first request after a quiet spell c
 
 Every `main` that passes CI is deployed automatically: the image is published, the container app is updated to
 it, and the job waits until the new revision is ready and serving that exact image. GitHub signs in to Azure with
-**OIDC** — the federated credential trusts only this repository's `main`, the role is Contributor on one resource
-group, and no secret is stored in GitHub.
+**OIDC** — the federated credential trusts only this repository's `production` environment, which only `main` may
+deploy to; the role is Contributor on one resource group, and no secret is stored in GitHub.
 
 ## CI
 

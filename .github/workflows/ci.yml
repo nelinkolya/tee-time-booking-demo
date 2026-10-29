@@ -138,8 +138,8 @@ jobs:
           docker push "$IMAGE:${{ github.sha }}"
           docker push "$IMAGE:latest"
 
-  # Rolls the commit's image out to Azure Container Apps. Signs in with OIDC: the federated credential trusts
-  # only this repository's main branch, and the role is limited to one resource group, so no secret is stored.
+  # Rolls the commit's image out to Azure Container Apps. Signs in with OIDC: the federated credential trusts only
+  # the production environment, which only main may deploy to, and the role covers one resource group.
   deploy:
     name: Deploy to Azure
     needs: publish
