@@ -1,5 +1,7 @@
 # Tee Time Booking — concurrent and duplicate requests, done right
 
+[![CI](https://github.com/nelinkolya/tee-time-booking-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/nelinkolya/tee-time-booking-demo/actions/workflows/ci.yml)
+
 A minimal golf tee-time booking API (ASP.NET Core 10, EF Core 10, SQL Server) with a React UI, built to show
 one thing: **no matter how requests race or repeat, a tee time never holds more players than it has spots,
 and one booking attempt never becomes two bookings.**
@@ -101,6 +103,20 @@ docker compose up --build       # app on http://localhost:8080, Aspire dashboard
 it, so traces, metrics and structured logs are visible in a browser with no further setup. SQL Server is not in
 the compose file: it is expected on the Docker host (`host.docker.internal`). The connection string reaches the
 container only as the `ConnectionStrings__TeeTimes` environment variable, never in the image.
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every pull request — three jobs in
+parallel:
+
+| Job | What it proves |
+|---|---|
+| **Tests (SQL Server)** | all tests, load tests included, against a real SQL Server 2022 container; results uploaded as a `.trx` artifact |
+| **Web build** | the React app type-checks and builds from the lockfile |
+| **Docker image smoke test** | the image builds from the `Dockerfile`, runs in Production against SQL Server, migrates, reports `/health` healthy, serves the UI and the API, and leaves out the demo reset and the API docs |
+
+The SQL Server `sa` password is generated per run, masked in the log, and never stored in the repository
+(`.github/scripts/start-sqlserver.sh`).
 
 ## Observability
 

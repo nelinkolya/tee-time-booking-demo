@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test:
+    name: Tests (SQL Server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Start SQL Server
+        run: bash .github/scripts/start-sqlserver.sh
+
+      - name: Restore
+        run: dotnet restore TeeTimeBooking.slnx
+
+      - name: Build
+        run: dotnet build TeeTimeBooking.slnx --configuration Release --no-restore
+
+      - name: Test
+        env:
+          ConnectionStrings__TeeTimesTest: Server=localhost,1433;Database=TeeTimeBooking_Test;User Id=sa;Password=${{ env.SQL_SA_PASSWORD }};TrustServerCertificate=True;Encrypt=True
+        run: >
+          dotnet test TeeTimeBooking.slnx --configuration Release --no-build
+          --logger "trx;LogFileName=results.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: TestResults/*.trx
+          if-no-files-found: ignore
+
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+
+  container:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build --tag teetime-booking:ci .
+
+      - name: Start SQL Server
+        run: bash .github/scripts/start-sqlserver.sh
+
+      - name: Run the container
+        env:
+          ConnectionStrings__TeeTimes: Server=host.docker.internal,1433;Database=TeeTimeBooking;User Id=sa;Password=${{ env.SQL_SA_PASSWORD }};TrustServerCertificate=True;Encrypt=True
+        run: >
+          docker run --detach --name app --publish 8080:8080
+          --add-host host.docker.internal:host-gateway
+          --env ConnectionStrings__TeeTimes
+          teetime-booking:ci
+
+      - name: Smoke test
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://localhost:8080/health > /dev/null; then break; fi
+            sleep 2
+          done
+          set -x
+          curl --silent --fail http://localhost:8080/health | grep -q Healthy
+          curl --silent --fail http://localhost:8080/ | grep -q '<div id="root">'
+          curl --silent --fail http://localhost:8080/api/tee-times | grep -q '"course"'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST http://localhost:8080/api/demo/reset)" = 404
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/openapi/v1.json)" = 404
+
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
