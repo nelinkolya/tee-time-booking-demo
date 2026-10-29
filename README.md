@@ -104,16 +104,31 @@ it, so traces, metrics and structured logs are visible in a browser with no furt
 the compose file: it is expected on the Docker host (`host.docker.internal`). The connection string reaches the
 container only as the `ConnectionStrings__TeeTimes` environment variable, never in the image.
 
+## Live demo
+
+**https://teetime-booking.yellowrock-3c024f16.swedencentral.azurecontainerapps.io** — Azure, free tiers. It scales
+to zero and the database auto-pauses, so the first request after a quiet spell can take up to a minute.
+
+| Piece | Azure resource |
+|---|---|
+| App | Container Apps (Consumption), 0.25 vCPU, 0–1 replicas, image from `ghcr.io/nelinkolya/tee-time-booking-demo` |
+| Database | Azure SQL Database free offer (serverless, auto-pause when the monthly free amount runs out) |
+| Database login | the app's **managed identity** — no password anywhere; the SQL server accepts Entra authentication only |
+| Telemetry | Application Insights via the OpenTelemetry Azure Monitor exporter (`APPLICATIONINSIGHTS_CONNECTION_STRING`) |
+
+CI publishes an image for every `main` that passes; it is then rolled out with
+`az containerapp update --image ghcr.io/nelinkolya/tee-time-booking-demo:<sha>`.
+
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every pull request — three jobs in
-parallel:
+GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every pull request — four jobs:
 
 | Job | What it proves |
 |---|---|
 | **Tests (SQL Server)** | all tests, load tests included, against a real SQL Server 2022 container; results uploaded as a `.trx` artifact |
 | **Web build** | the React app type-checks and builds from the lockfile |
 | **Docker image smoke test** | the image builds from the `Dockerfile`, runs in Production against SQL Server, migrates, reports `/health` healthy, serves the UI and the API, and leaves out the demo reset and the API docs |
+| **Publish image** | after all three pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
 
 The SQL Server `sa` password is generated per run, masked in the log, and never stored in the repository
 (`.github/scripts/start-sqlserver.sh`).
