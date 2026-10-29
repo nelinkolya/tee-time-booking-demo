@@ -38,7 +38,13 @@ public partial class BookingService(
         BookingResult result;
         try
         {
-            result = await BookCoreAsync(teeTimeId, request, idempotencyKey, ct);
+            // A transient failure retries the whole attempt; if the first try did commit, the retry finds the
+            // booking by its idempotency key and replays it.
+            result = await db.Database.CreateExecutionStrategy().ExecuteAsync(() =>
+            {
+                db.ChangeTracker.Clear();
+                return BookCoreAsync(teeTimeId, request, idempotencyKey, ct);
+            });
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -131,7 +137,10 @@ public partial class BookingService(
         }
     }
 
-    public async Task<Booking?> CancelAsync(Guid bookingId, CancellationToken ct = default)
+    public Task<Booking?> CancelAsync(Guid bookingId, CancellationToken ct = default) =>
+        db.Database.CreateExecutionStrategy().ExecuteAsync(() => CancelCoreAsync(bookingId, ct));
+
+    private async Task<Booking?> CancelCoreAsync(Guid bookingId, CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 

@@ -1,3 +1,4 @@
+using Azure.Monitor.OpenTelemetry.Exporter;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using OpenTelemetry;
@@ -12,8 +13,11 @@ using TeeTimeBooking.Api.Observability;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<BookingDb>(o => o
-    .UseSqlServer(builder.Configuration.GetConnectionString("TeeTimes")
-        ?? throw new InvalidOperationException("Set ConnectionStrings:TeeTimes (dotnet user-secrets)."))
+    .UseSqlServer(
+        builder.Configuration.GetConnectionString("TeeTimes")
+            ?? throw new InvalidOperationException("Set ConnectionStrings:TeeTimes (dotnet user-secrets)."),
+        // A paused serverless database takes up to a minute to resume.
+        sql => sql.EnableRetryOnFailure(maxRetryCount: 6, maxRetryDelay: TimeSpan.FromSeconds(15), errorNumbersToAdd: null))
     // Racing duplicates collide on the idempotency index by design; EF would log each one as an error.
     // Unhandled failures are still logged as errors by the exception handler.
     .ConfigureWarnings(w => w.Log(
@@ -38,7 +42,14 @@ var otel = builder.Services.AddOpenTelemetry()
         o.IncludeScopes = true;
         o.IncludeFormattedMessage = true;
     });
-if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+var appInsights = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+if (!string.IsNullOrWhiteSpace(appInsights))
+{
+    otel.WithTracing(t => t.AddAzureMonitorTraceExporter(o => o.ConnectionString = appInsights))
+        .WithMetrics(m => m.AddAzureMonitorMetricExporter(o => o.ConnectionString = appInsights))
+        .WithLogging(l => l.AddAzureMonitorLogExporter(o => o.ConnectionString = appInsights));
+}
+else if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
 {
     otel.UseOtlpExporter();
 }
