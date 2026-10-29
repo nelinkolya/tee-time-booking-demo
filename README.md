@@ -115,9 +115,11 @@ to zero and the database auto-pauses, so the first request after a quiet spell c
 | Database | Azure SQL Database free offer (serverless, auto-pause when the monthly free amount runs out) |
 | Database login | the app's **managed identity** — no password anywhere; the SQL server accepts Entra authentication only |
 | Telemetry | Application Insights via the OpenTelemetry Azure Monitor exporter (`APPLICATIONINSIGHTS_CONNECTION_STRING`) |
+| Migrations | a Container Apps **job** (`--migrate`) with its own identity — the only one allowed to change the schema; the app runs with `Database__MigrateOnStartup=false` |
+| Infrastructure | all of it in **Bicep** (`infra/main.bicep`, see `infra/README.md`) |
 
-Every `main` that passes CI is deployed automatically: the image is published, the container app is updated to
-it, and the job waits until the new revision is ready and serving that exact image. GitHub signs in to Azure with
+Every `main` that passes CI is deployed automatically: the image is published, the migration job runs with it
+(a failed migration stops here, before any revision is created), the container app is updated to it, and the job waits until the new revision is ready and serving that exact image. GitHub signs in to Azure with
 **OIDC** — the federated credential trusts only this repository's `production` environment, which only `main` may
 deploy to; the role is Contributor on one resource group, and no secret is stored in GitHub.
 
@@ -180,7 +182,11 @@ response of each operation, the `Idempotency-Key` header, and problem+json error
 | `GET` | `/api/tee-times/{id}/bookings` | |
 | `POST` | `/api/tee-times/{id}/bookings` | header `Idempotency-Key`; body `{ playerName, players }` → `201` / `200` replay / `409` full / `422` key reused / `400` / `404` |
 | `POST` | `/api/bookings/{id}/cancel` | idempotent |
+| `GET` | `/api/version` | release, commit and build time |
 | `POST` | `/api/demo/reset` | Development only |
+
+**Rate limits** (per client IP, `429` with `Retry-After`): bookings and cancels 1,100 per 10 minutes — one
+1,000-player rush from the UI, not a flood — and other API calls 600 a minute.
 
 ## Out of scope
 

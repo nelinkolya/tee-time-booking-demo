@@ -104,11 +104,14 @@ jobs:
       - name: Run the container
         env:
           ConnectionStrings__TeeTimes: Server=host.docker.internal,1433;Database=TeeTimeBooking;User Id=sa;Password=${{ env.SQL_SA_PASSWORD }};TrustServerCertificate=True;Encrypt=True
-        run: >
-          docker run --detach --name app --publish 8080:8080
-          --add-host host.docker.internal:host-gateway
-          --env ConnectionStrings__TeeTimes
-          teetime-booking:ci
+        # As in Azure: a one-off container applies the migrations, then the app starts without touching the schema.
+        run: |
+          docker run --rm --add-host host.docker.internal:host-gateway --env ConnectionStrings__TeeTimes \
+            teetime-booking:ci --migrate
+          docker run --detach --name app --publish 8080:8080 \
+            --add-host host.docker.internal:host-gateway --env ConnectionStrings__TeeTimes \
+            --env Database__MigrateOnStartup=false \
+            teetime-booking:ci
 
       - name: Smoke test
         run: |
@@ -185,6 +188,24 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Before the app gets the new image: a failed migration stops the deployment, and no revision is created.
+      - name: Run the migrations
+        run: |
+          job="--resource-group rg-teetime-demo --name job-teetime-migrate"
+          az containerapp job update $job --image ghcr.io/${{ github.repository }}:${{ github.sha }} --output none
+          execution=$(az containerapp job start $job --query name -o tsv)
+          for attempt in $(seq 1 60); do
+            status=$(az containerapp job execution show $job --job-execution-name "$execution" --query properties.status -o tsv)
+            echo "$execution: $status"
+            case "$status" in
+              Succeeded) exit 0 ;;
+              Failed|Stopped|Degraded) exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "The migration job did not finish in time." >&2
+          exit 1
 
       - name: Update the container app
         run: >

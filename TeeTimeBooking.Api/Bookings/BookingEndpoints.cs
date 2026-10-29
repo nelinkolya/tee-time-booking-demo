@@ -16,7 +16,7 @@ public static class BookingEndpoints
 
     public static void MapBookingEndpoints(this IEndpointRouteBuilder app)
     {
-        var api = app.MapGroup("/api");
+        var api = app.MapGroup("/api").RequireRateLimiting(RateLimits.Api);
 
         api.MapGet("/tee-times", GetTeeTimes)
             .WithTags("Tee times")
@@ -40,13 +40,17 @@ public static class BookingEndpoints
                 "Concurrent requests for the same tee time are serialised by the database, so it is never overbooked.")
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .RequireRateLimiting(RateLimits.Bookings);
 
         api.MapPost("/bookings/{id:guid}/cancel", CancelBooking)
             .WithTags("Bookings")
             .WithSummary("Cancel a booking and free its spots")
             .WithDescription("Idempotent: cancelling an already cancelled booking returns it unchanged.")
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .RequireRateLimiting(RateLimits.Bookings);
     }
 
     public static async Task<Ok<List<TeeTimeDto>>> GetTeeTimes(

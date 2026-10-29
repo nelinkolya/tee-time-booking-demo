@@ -56,6 +56,7 @@ else if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_EN
     otel.UseOtlpExporter();
 }
 builder.Services.AddProblemDetails();
+builder.Services.AddClientRateLimits(builder.Configuration);
 builder.Services.AddHealthChecks().AddDbContextCheck<BookingDb>("database");
 builder.Services.AddOpenApi(o => o.AddDocumentTransformer((doc, _, _) =>
 {
@@ -70,17 +71,31 @@ builder.Services.AddOpenApi(o => o.AddDocumentTransformer((doc, _, _) =>
 
 var app = builder.Build();
 
+// `--migrate`: apply migrations and exit. In Azure a Container Apps job runs this before a new revision rolls out,
+// so a failing migration stops the deployment and the app itself needs no right to change the schema.
+if (args.Contains("--migrate"))
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<BookingDb>().Database.MigrateAsync();
+    app.Logger.LogInformation("Migrations applied");
+    return;
+}
+
 // Tests drop and migrate their own database.
 if (!app.Environment.IsEnvironment("Testing"))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<BookingDb>();
-    await db.Database.MigrateAsync();
+    if (app.Configuration.GetValue("Database:MigrateOnStartup", defaultValue: true))
+    {
+        await db.Database.MigrateAsync();
+    }
     await Seed.EnsureTeeTimesAsync(db, DateOnly.FromDateTime(DateTime.Now));
 }
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseRateLimiter();
 
 app.MapBookingEndpoints();
 // Readiness (and the general health check): the database must answer.

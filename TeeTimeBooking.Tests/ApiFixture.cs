@@ -21,6 +21,8 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:TeeTimes", ConnectionString);
+        // The load tests send thousands of requests from one client; RateLimitTests turns limits back on.
+        builder.UseSetting("RateLimiting:Enabled", "false");
         builder.ConfigureLogging(l => l.AddFakeLogging().SetMinimumLevel(LogLevel.Debug));
     }
 

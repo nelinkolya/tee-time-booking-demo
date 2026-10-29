@@ -16,7 +16,7 @@ public class OpenApiTests(ApiFixture api)
             .Single(p => p.GetProperty("in").GetString() == "header");
         Assert.Equal("Idempotency-Key", header.GetProperty("name").GetString());
         Assert.Equal(
-            ["200", "201", "400", "404", "409", "422"],
+            ["200", "201", "400", "404", "409", "422", "429"],
             post.GetProperty("responses").EnumerateObject().Select(r => r.Name).Order());
         Assert.True(post.GetProperty("responses").GetProperty("409").GetProperty("content").TryGetProperty("application/problem+json", out _));
     }
