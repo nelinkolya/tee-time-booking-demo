@@ -13,7 +13,7 @@ namespace TeeTimeBooking.Tests;
 /// <summary>The API in-process over a real SQL Server: concurrency bugs need real locks.</summary>
 public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private static int _nextSlot;
+    private int _nextSlot;
 
     public string ConnectionString { get; } = TestDatabase.ConnectionString();
 
@@ -44,7 +44,7 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         var teeTime = new TeeTime
         {
             Course = "Test Course",
-            StartsAt = new DateTime(2030, 1, 1, 7, 0, 0).AddMinutes(10 * slot),
+            StartsAt = new DateTime(2030, 1, 1, 7, 0, 0).AddMinutes(10.0 * slot),
             Capacity = capacity,
         };
         db.TeeTimes.Add(teeTime);
@@ -66,10 +66,10 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             .SumAsync(b => (int?)b.Players) ?? 0;
     }
 
-    public static Task<HttpResponseMessage> BookAsync(
+    public static async Task<HttpResponseMessage> BookAsync(
         HttpClient client, int teeTimeId, string playerName, int players, string? idempotencyKey)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/tee-times/{teeTimeId}/bookings")
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/tee-times/{teeTimeId}/bookings")
         {
             Content = JsonContent.Create(new BookingRequest(playerName, players)),
         };
@@ -77,7 +77,7 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         {
             request.Headers.Add(BookingEndpoints.IdempotencyKeyHeader, idempotencyKey);
         }
-        return client.SendAsync(request);
+        return await client.SendAsync(request);
     }
 
     /// <summary>Releases all calls from one gate, so they reach the server together.</summary>
