@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      load_tests:
+        description: Run load tests
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -41,8 +46,10 @@ jobs:
       - name: Test
         env:
           ConnectionStrings__TeeTimesTest: Server=localhost,1433;Database=TeeTimeBooking_Test;User Id=sa;Password=${{ env.SQL_SA_PASSWORD }};TrustServerCertificate=True;Encrypt=True
+          # Load tests only on a manual run with the box ticked.
+          TEST_FILTER: ${{ !inputs.load_tests && '--filter Category!=Load' || '' }}
         run: >
-          dotnet test TeeTimeBooking.slnx --configuration Release --no-build
+          dotnet test TeeTimeBooking.slnx --configuration Release --no-build $TEST_FILTER
           --logger "trx;LogFileName=results.trx" --results-directory TestResults
 
       - name: Upload test results

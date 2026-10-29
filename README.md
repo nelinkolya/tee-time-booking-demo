@@ -127,11 +127,14 @@ GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every p
 
 | Job | What it proves |
 |---|---|
-| **Tests (SQL Server)** | all tests, load tests included, against a real SQL Server 2022 container; results uploaded as a `.trx` artifact |
+| **Tests (SQL Server)** | all tests except the load tests, against a real SQL Server 2022 container; results uploaded as a `.trx` artifact |
 | **Web build** | the React app type-checks and builds from the lockfile |
 | **Docker image smoke test** | the image builds from the `Dockerfile`, runs in Production against SQL Server, migrates, reports `/health` healthy, serves the UI and the API, and leaves out the demo reset and the API docs |
 | **Publish image** | after all three pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
 | **Deploy to Azure** | after publishing: rolls the image out to Container Apps via OIDC and checks the new revision serves it |
+
+The load tests run only on demand: Actions → CI → **Run workflow** with **Run load tests** ticked, or
+`gh workflow run ci.yml -f load_tests=true`.
 
 The SQL Server `sa` password is generated per run, masked in the log, and never stored in the repository
 (`.github/scripts/start-sqlserver.sh`).
