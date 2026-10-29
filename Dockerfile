@@ -1,6 +1,6 @@
 # UI built by Node, API published by the SDK; the final image holds only the runtime and the output.
 
-FROM node:22-alpine AS web
+FROM node:25-alpine AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
