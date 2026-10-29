@@ -1,0 +1,26 @@
+# App on :8080, Aspire dashboard on :18888. SQL Server runs on the Docker host, not here.
+
+services:
+  app:
+    build: .
+    image: teetime-booking
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__TeeTimes: ${TEETIMES_CONNECTION:?Set TEETIMES_CONNECTION in .env}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dashboard:18889
+      OTEL_SERVICE_NAME: TeeTimeBooking.Api
+    extra_hosts:
+      # host.docker.internal on Linux too.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - dashboard
+    restart: unless-stopped
+
+  dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6
+    ports:
+      - "18888:18888"
+    environment:
+      # Local demo only: no login.
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
