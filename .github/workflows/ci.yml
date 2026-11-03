@@ -60,6 +60,28 @@ jobs:
           path: TestResults/*.trx
           if-no-files-found: ignore
 
+  web-tests:
+    name: Web tests
+    concurrency:
+      group: web-tests-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
   web:
     name: Web build
     concurrency:
@@ -80,7 +102,6 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - run: npm ci --no-audit --no-fund
-      - run: npm test
       - run: npm run build
 
   container:
@@ -139,7 +160,7 @@ jobs:
     concurrency:
       group: publish-${{ github.ref }}
       cancel-in-progress: true
-    needs: [test, web, container]
+    needs: [test, web-tests, web, container]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20

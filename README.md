@@ -139,14 +139,15 @@ deploy to; the role is Contributor on one resource group, and no secret is store
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every pull request — five jobs:
+GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every pull request — six jobs:
 
 | Job | What it proves |
 |---|---|
 | **Tests (SQL Server)** | all tests except the load tests, against a real SQL Server 2022 container; results uploaded as a `.trx` artifact |
-| **Web build** | the UI tests pass, and the React app type-checks and builds from the lockfile |
+| **Web tests** | the UI tests pass (Vitest, React Testing Library) |
+| **Web build** | the React app type-checks and builds from the lockfile |
 | **Docker image smoke test** | the image builds from the `Dockerfile`, runs in Production against SQL Server, migrates, reports `/health` healthy, serves the UI and the API, and leaves out the demo reset and the API docs |
-| **Publish image** | after all three pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
+| **Publish image** | after all four pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
 | **Deploy to Azure** | after publishing: rolls the image out to Container Apps via OIDC and checks the new revision serves it |
 
 A newer push cancels the checks still running for an older one, but never a deployment: deployments run one at a
