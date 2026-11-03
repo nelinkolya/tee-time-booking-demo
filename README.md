@@ -74,6 +74,20 @@ Load tests carry `Category=Load`: `dotnet test --filter Category!=Load` skips th
 The tests were mutation-checked: removing the capacity condition fails 5 of them; removing the twin re-check
 in step 3 fails the "last spots" test.
 
+## UI tests — Vitest and React Testing Library
+
+`cd web && npm test` runs them in jsdom, with the API module mocked — no browser, no server:
+
+| Test | Proves |
+|---|---|
+| booking form, repeated before it succeeds | the same `Idempotency-Key` is sent again, so the server replays |
+| booking form, after a success or a changed request | a new key, so a new attempt is not mistaken for a retry |
+| date changed while the previous day is still loading | the stale request is aborted and its late answer never replaces the newer one |
+| `inPool` | at most `limit` requests in flight, results in call order, a failure does not stop the rest |
+| `today()` | the local date, not UTC — the tests run in Kyiv time, since CI runners are UTC |
+
+Each was checked by breaking the code it covers: every such change fails its test.
+
 ## Run
 
 ```
@@ -130,7 +144,7 @@ GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every p
 | Job | What it proves |
 |---|---|
 | **Tests (SQL Server)** | all tests except the load tests, against a real SQL Server 2022 container; results uploaded as a `.trx` artifact |
-| **Web build** | the React app type-checks and builds from the lockfile |
+| **Web build** | the UI tests pass, and the React app type-checks and builds from the lockfile |
 | **Docker image smoke test** | the image builds from the `Dockerfile`, runs in Production against SQL Server, migrates, reports `/health` healthy, serves the UI and the API, and leaves out the demo reset and the API docs |
 | **Publish image** | after all three pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
 | **Deploy to Azure** | after publishing: rolls the image out to Container Apps via OIDC and checks the new revision serves it |
