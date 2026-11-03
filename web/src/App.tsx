@@ -83,7 +83,18 @@ export function App() {
               </h2>
               <BookingForm teeTime={selected} onResult={(a) => { addLog([describe(a)]); void refresh(); }} />
               <StressPanel teeTime={selected} onResults={(lines) => { addLog(lines); void refresh(); }} />
-              <BookingList bookings={bookings} onCancel={async (id) => { await cancel(id); await refresh(); }} />
+              <BookingList
+                bookings={bookings}
+                onCancel={async (id) => {
+                  // BookingList does not await this, so a failure must be shown here or it is lost.
+                  try {
+                    await cancel(id);
+                    await refresh();
+                  } catch (e) {
+                    setError(String(e));
+                  }
+                }}
+              />
             </>
           ) : (
             <p className="muted">Pick a tee time.</p>

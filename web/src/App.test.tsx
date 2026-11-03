@@ -1,14 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getTeeTimes, getVersion, type TeeTime } from "./api";
+import { cancel, getBookings, getTeeTimes, getVersion, type Booking, type TeeTime } from "./api";
 import { App } from "./App";
 
 vi.mock("./api");
 
 const slot = (id: number, startsAt: string): TeeTime => ({ id, course: "Riverside Links", startsAt, capacity: 4, bookedPlayers: 0, availableSpots: 4 });
 
-describe("App refresh", () => {
+describe("App", () => {
   beforeEach(() => {
     vi.mocked(getVersion).mockReturnValue(new Promise(() => {}));
   });
@@ -41,5 +42,19 @@ describe("App refresh", () => {
     expect(screen.queryByText("09:00")).not.toBeInTheDocument();
     expect(screen.getByText("07:10")).toBeInTheDocument();
     expect(container.querySelector(".error")).toBeNull();
+  });
+
+  it("shows a failed cancel instead of losing it", async () => {
+    const booking: Booking = { id: "b1", teeTimeId: 1, playerName: "Alex", players: 2, status: "Confirmed", createdAtUtc: "2026-11-03T06:00:00Z" };
+    vi.mocked(getTeeTimes).mockResolvedValue([slot(1, "2026-11-03T07:10:00")]);
+    vi.mocked(getBookings).mockResolvedValue([booking]);
+    vi.mocked(cancel).mockRejectedValue(new Error("Cancel failed: 500"));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /07:10/ }));
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    expect(await screen.findByText("Error: Cancel failed: 500")).toBeInTheDocument();
   });
 });
