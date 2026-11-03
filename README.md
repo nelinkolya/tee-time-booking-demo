@@ -82,11 +82,19 @@ in step 3 fails the "last spots" test.
 |---|---|
 | booking form, repeated before it succeeds | the same `Idempotency-Key` is sent again, so the server replays |
 | booking form, after a success or a changed request | a new key, so a new attempt is not mistaken for a retry |
+| booking form, no answer from the server | the failure is logged and the key is kept, so trying again is still a retry |
+| a different tee time | the form starts over with a new key |
+| cancel that fails | the error is shown on the page, not lost as an unhandled rejection |
 | date changed while the previous day is still loading | the stale request is aborted and its late answer never replaces the newer one |
 | `inPool` | at most `limit` requests in flight, results in call order, a failure does not stop the rest |
 | `today()` | the local date, not UTC — the tests run in Kyiv time, since CI runners are UTC |
 
 Each was checked by breaking the code it covers: every such change fails its test.
+
+`npm run lint` runs **oxlint** with type-aware rules — among them `no-misused-promises` and `no-floating-promises`,
+which flag an async handler whose failure nobody would catch, and the React hooks rules. It is oxlint rather than
+ESLint because typescript-eslint needs the TypeScript compiler's JavaScript API, which TypeScript 7 no longer has;
+oxlint's type-aware rules run on TypeScript 7 itself.
 
 ## Run
 
@@ -146,7 +154,7 @@ GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every p
 |---|---|
 | **Tests (SQL Server)** | all tests except the load tests, against a real SQL Server 2022 container; a results summary on the run page (GitHubActionsTestLogger), failures annotated at the test, and a `.trx` artifact |
 | **Web tests** | the UI tests pass (Vitest, React Testing Library) |
-| **Web build** | the React app type-checks and builds from the lockfile |
+| **Web build** | the React app passes the linter, type-checks and builds from the lockfile |
 | **Docker image smoke test** | the image builds from the `Dockerfile`, runs in Production against SQL Server, migrates, reports `/health` healthy, serves the UI and the API, and leaves out the demo reset and the API docs |
 | **Publish image** | after all four pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
 | **Deploy to Azure** | after publishing: rolls the image out to Container Apps via OIDC and checks the new revision serves it |
