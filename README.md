@@ -130,6 +130,7 @@ to zero and the database auto-pauses, so the first request after a quiet spell c
 | Database login | the app's **managed identity** — no password anywhere; the SQL server accepts Entra authentication only |
 | Telemetry | Application Insights via the OpenTelemetry Azure Monitor exporter (`APPLICATIONINSIGHTS_CONNECTION_STRING`) |
 | Migrations | a Container Apps **job** (`--migrate`) with its own identity — the only one allowed to change the schema; the app runs with `Database__MigrateOnStartup=false` |
+| Cost guard | a $5-a-year budget with email alerts, and an **Azure Monitor alert** when the app has not scaled to zero for six hours — a replica kept warm would use the month's free vCPU in about eight days |
 | Infrastructure | all of it in **Bicep** (`infra/main.bicep`, see `infra/README.md`) |
 
 Every `main` that passes CI is deployed automatically: the image is published, the migration job runs with it

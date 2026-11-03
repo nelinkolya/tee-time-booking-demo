@@ -2,7 +2,7 @@
 
 `main.bicep` describes everything in the `rg-teetime-demo` resource group: Log Analytics, Application Insights,
 the SQL server (Entra-only) with the free-offer database, the Container Apps environment, the app, the migration
-job and its identity.
+job and its identity, and the alert that emails when the app stops scaling to zero.
 
 ```
 # preview — changes nothing

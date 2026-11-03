@@ -5,3 +5,4 @@ param image = 'ghcr.io/nelinkolya/tee-time-booking-demo:latest'
 
 param sqlAdminLogin = 'nikolay.nelin@gmail.com'
 param sqlAdminObjectId = '36941adb-ac49-4983-9cee-57638ea6a992'
+param alertEmail = 'nikolay.nelin@gmail.com'
