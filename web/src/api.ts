@@ -23,14 +23,14 @@ export interface BookAttempt {
   problem?: { title: string; availableSpots?: number };
 }
 
-export async function getTeeTimes(date: string): Promise<TeeTime[]> {
-  const res = await fetch(`/api/tee-times?date=${date}`);
+export async function getTeeTimes(date: string, signal?: AbortSignal): Promise<TeeTime[]> {
+  const res = await fetch(`/api/tee-times?date=${date}`, { signal });
   if (!res.ok) throw new Error(`Loading tee times failed: ${res.status}`);
   return res.json();
 }
 
-export async function getBookings(teeTimeId: number): Promise<Booking[]> {
-  const res = await fetch(`/api/tee-times/${teeTimeId}/bookings`);
+export async function getBookings(teeTimeId: number, signal?: AbortSignal): Promise<Booking[]> {
+  const res = await fetch(`/api/tee-times/${teeTimeId}/bookings`, { signal });
   if (!res.ok) throw new Error(`Loading bookings failed: ${res.status}`);
   return res.json();
 }

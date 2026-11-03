@@ -20,18 +20,22 @@ export function App() {
 
   const selected = teeTimes.find((t) => t.id === selectedId);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
-      setTeeTimes(await getTeeTimes(date));
-      if (selectedId !== undefined) setBookings(await getBookings(selectedId));
+      setTeeTimes(await getTeeTimes(date, signal));
+      if (selectedId !== undefined) setBookings(await getBookings(selectedId, signal));
       setError(undefined);
     } catch (e) {
+      if (signal?.aborted) return; // superseded by a newer refresh, not an error
       setError(String(e));
     }
   }, [date, selectedId]);
 
+  // A newer date or tee time aborts the request still loading, so a slow stale response cannot overwrite it.
   useEffect(() => {
-    void refresh();
+    const controller = new AbortController();
+    void refresh(controller.signal);
+    return () => controller.abort();
   }, [refresh]);
 
   const addLog = (lines: LogEntry[]) =>
