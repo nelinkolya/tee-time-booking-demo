@@ -17,6 +17,9 @@ param sqlAdminLogin string
 @description('Object id of that Entra user.')
 param sqlAdminObjectId string
 
+@description('Who gets the alerts by email.')
+param alertEmail string
+
 var sqlServerName = 'sql-teetime-swedencentral-89a75f'
 var databaseName = 'TeeTimeBooking'
 var sqlHost = '${sqlServerName}${environment().suffixes.sqlServerHostname}'
@@ -184,6 +187,48 @@ resource migrate 'Microsoft.App/jobs@2025-01-01' = {
         }
       ]
     }
+  }
+}
+
+// Scale to zero is what keeps the app inside the free grant: a replica that never stops (a bot or an uptime
+// pinger keeping it warm) uses the month's free vCPU-seconds in about eight days. The metric reads 0 while the
+// app is scaled to zero, so a minimum above 0 over six hours means it has not stopped once in that time.
+resource owner 'Microsoft.Insights/actionGroups@2023-01-01' = {
+  name: 'ag-teetime-owner'
+  location: 'global'
+  properties: {
+    groupShortName: 'teetime'
+    enabled: true
+    emailReceivers: [ { name: 'owner', emailAddress: alertEmail, useCommonAlertSchema: true } ]
+  }
+}
+
+resource alwaysOn 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-teetime-not-scaling-to-zero'
+  location: 'global'
+  properties: {
+    description: 'The app has had a replica running for six hours without scaling to zero: something keeps it warm, and it will soon cost money.'
+    severity: 2
+    enabled: true
+    scopes: [ app.id ]
+    evaluationFrequency: 'PT1H'
+    windowSize: 'PT6H'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'replica-never-scaled-to-zero'
+          metricNamespace: 'Microsoft.App/containerApps'
+          metricName: 'Replicas'
+          timeAggregation: 'Minimum'
+          operator: 'GreaterThan'
+          threshold: 0
+        }
+      ]
+    }
+    autoMitigate: true // resolves itself once the app scales to zero again
+    actions: [ { actionGroupId: owner.id } ]
   }
 }
 
