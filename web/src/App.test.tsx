@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cancel, getBookings, getTeeTimes, getVersion, type Booking, type TeeTime } from "./api";
+import { book, cancel, getBookings, getTeeTimes, getVersion, type Booking, type TeeTime } from "./api";
 import { App } from "./App";
 
 vi.mock("./api");
@@ -56,5 +56,22 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
     expect(await screen.findByText("Error: Cancel failed: 500")).toBeInTheDocument();
+  });
+
+  it("books a different tee time with a new idempotency key", async () => {
+    vi.mocked(getTeeTimes).mockResolvedValue([slot(1, "2026-11-03T07:10:00"), slot(2, "2026-11-03T07:20:00")]);
+    vi.mocked(getBookings).mockResolvedValue([]);
+    vi.mocked(book).mockResolvedValue({ status: 409, replayed: false, problem: { title: "Not enough free spots." } });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /07:10/ }));
+    await user.click(await screen.findByRole("button", { name: "Book" }));
+    await user.click(screen.getByRole("button", { name: /07:20/ }));
+    await user.click(await screen.findByRole("button", { name: "Book" }));
+
+    const [[firstSlot, , , firstKey], [secondSlot, , , secondKey]] = vi.mocked(book).mock.calls;
+    expect([firstSlot, secondSlot]).toEqual([1, 2]);
+    expect(secondKey).not.toBe(firstKey);
   });
 });

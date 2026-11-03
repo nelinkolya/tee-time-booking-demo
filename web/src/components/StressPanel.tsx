@@ -44,7 +44,7 @@ export function StressPanel({ teeTime, onResults }: { teeTime: TeeTime; onResult
       <button
         disabled={busy}
         onClick={() =>
-          run("Rush", Array.from({ length: rush }, (_, i) => () => book(teeTime.id, `Rusher ${i + 1}`, 1, crypto.randomUUID())))
+          void run("Rush", Array.from({ length: rush }, (_, i) => () => book(teeTime.id, `Rusher ${i + 1}`, 1, crypto.randomUUID())))
         }
       >
         {busy ? "Sending…" : "players at once"}
@@ -53,7 +53,7 @@ export function StressPanel({ teeTime, onResults }: { teeTime: TeeTime; onResult
         disabled={busy}
         onClick={() => {
           const key = crypto.randomUUID();
-          return run("Double-submit", Array.from({ length: 10 }, () => () => book(teeTime.id, "Impatient", 2, key)));
+          void run("Double-submit", Array.from({ length: 10 }, () => () => book(teeTime.id, "Impatient", 2, key)));
         }}
       >
         Same request ×10

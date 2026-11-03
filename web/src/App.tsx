@@ -34,9 +34,30 @@ export function App() {
   // A newer date or tee time aborts the request still loading, so a slow stale response cannot overwrite it.
   useEffect(() => {
     const controller = new AbortController();
+    // oxlint-disable-next-line react/set-state-in-effect -- syncing with the server: refresh sets state only once it answers
     void refresh(controller.signal);
     return () => controller.abort();
   }, [refresh]);
+
+  // Event handlers do not await these, so each one shows its own failure instead of losing it.
+  const cancelBooking = async (id: string) => {
+    try {
+      await cancel(id);
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const resetDemoAndRefresh = async () => {
+    try {
+      await resetDemo();
+      setLog([]);
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
 
   const addLog = (lines: LogEntry[]) =>
     setLog((prev) => [...lines.map((l) => ({ ...l, id: nextLogId.current++ })), ...prev].slice(0, 60));
@@ -53,14 +74,7 @@ export function App() {
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           {import.meta.env.DEV && (
             <>
-              <button
-                className="secondary"
-                onClick={async () => {
-                  await resetDemo();
-                  setLog([]);
-                  await refresh();
-                }}
-              >
+              <button className="secondary" onClick={() => void resetDemoAndRefresh()}>
                 Reset demo
               </button>
               <a href="/swagger" target="_blank" rel="noreferrer">
@@ -81,20 +95,10 @@ export function App() {
               <h2>
                 {time(selected.startsAt)} — {selected.availableSpots} of {selected.capacity} spots free
               </h2>
-              <BookingForm teeTime={selected} onResult={(a) => { addLog([describe(a)]); void refresh(); }} />
+              {/* A different tee time is a different attempt: a new form, so a new idempotency key. */}
+              <BookingForm key={selected.id} teeTime={selected} onResult={(a) => { addLog([describe(a)]); void refresh(); }} />
               <StressPanel teeTime={selected} onResults={(lines) => { addLog(lines); void refresh(); }} />
-              <BookingList
-                bookings={bookings}
-                onCancel={async (id) => {
-                  // BookingList does not await this, so a failure must be shown here or it is lost.
-                  try {
-                    await cancel(id);
-                    await refresh();
-                  } catch (e) {
-                    setError(String(e));
-                  }
-                }}
-              />
+              <BookingList bookings={bookings} onCancel={(id) => void cancelBooking(id)} />
             </>
           ) : (
             <p className="muted">Pick a tee time.</p>

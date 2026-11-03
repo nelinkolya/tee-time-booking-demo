@@ -66,4 +66,18 @@ describe("BookingForm idempotency key", () => {
 
     expect(onResult).toHaveBeenCalledWith(full);
   });
+
+  it("reports a request that got no answer and keeps the key for the retry", async () => {
+    vi.mocked(book).mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValueOnce(created);
+    const onResult = vi.fn();
+    const user = userEvent.setup();
+    render(<BookingForm teeTime={teeTime} onResult={onResult} />);
+
+    await user.click(screen.getByRole("button", { name: "Book" }));
+    await user.click(screen.getByRole("button", { name: "Book" }));
+
+    expect(onResult).toHaveBeenNthCalledWith(1, { status: 0, replayed: false, problem: { title: "TypeError: Failed to fetch" } });
+    const [first, second] = sentKeys();
+    expect(second).toBe(first);
+  });
 });
