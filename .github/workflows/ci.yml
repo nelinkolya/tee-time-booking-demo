@@ -50,7 +50,9 @@ jobs:
           TEST_FILTER: ${{ !inputs.load_tests && '--filter Category!=Load' || '' }}
         run: >
           dotnet test TeeTimeBooking.slnx --configuration Release --no-build $TEST_FILTER
+          --logger GitHubActions
           --logger "trx;LogFileName=results.trx" --results-directory TestResults
+          -- RunConfiguration.CollectSourceInformation=true
 
       - name: Upload test results
         if: always()

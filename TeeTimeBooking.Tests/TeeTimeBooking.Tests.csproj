@@ -9,6 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The GitHubActions logger in CI: a results summary on the run page, annotations on failures. -->
+    <PackageReference Include="GitHubActionsTestLogger" Version="3.0.5" PrivateAssets="all" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.11.0" />

@@ -49,7 +49,7 @@ not `Guid.NewGuid()`: new rows append to the last page instead of splitting rand
 with SQL Server's own `ORDER BY Id` — .NET and SQL Server sort GUIDs differently, which is also why
 `Guid.CreateVersion7()` would not help here.
 
-## Tests — 37, against a real SQL Server
+## Tests — 43, against a real SQL Server
 
 Concurrency bugs don't show up against an in-memory provider, so the suite runs against SQL Server and fires
 requests through the real HTTP pipeline, all released at once from one gate.
@@ -143,7 +143,7 @@ GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every p
 
 | Job | What it proves |
 |---|---|
-| **Tests (SQL Server)** | all tests except the load tests, against a real SQL Server 2022 container; results uploaded as a `.trx` artifact |
+| **Tests (SQL Server)** | all tests except the load tests, against a real SQL Server 2022 container; a results summary on the run page (GitHubActionsTestLogger), failures annotated at the test, and a `.trx` artifact |
 | **Web tests** | the UI tests pass (Vitest, React Testing Library) |
 | **Web build** | the React app type-checks and builds from the lockfile |
 | **Docker image smoke test** | the image builds from the `Dockerfile`, runs in Production against SQL Server, migrates, reports `/health` healthy, serves the UI and the API, and leaves out the demo reset and the API docs |
