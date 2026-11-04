@@ -9,6 +9,14 @@
     <!-- The SDK appends the commit to InformationalVersion: from .git locally, from SourceRevisionId in Docker. -->
   </PropertyGroup>
 
+  <!-- A Debug build writes the OpenAPI document to web/openapi.json, the contract the UI's types are checked against.
+       CI builds it again and fails if the committed copy is stale. Release builds (tests, Docker) skip it. -->
+  <PropertyGroup>
+    <OpenApiGenerateDocuments Condition="'$(Configuration)' != 'Debug'">false</OpenApiGenerateDocuments>
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)/../web</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(BuildTimestamp)' != ''">
     <AssemblyMetadata Include="BuildTimestamp" Value="$(BuildTimestamp)" />
   </ItemGroup>
@@ -16,6 +24,10 @@
   <ItemGroup>
     <!-- The OpenAPI document is built in (Microsoft.AspNetCore.OpenApi); Swagger UI only renders it. -->
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.14">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.3.1" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.1" />

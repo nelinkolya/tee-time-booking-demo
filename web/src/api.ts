@@ -16,6 +16,11 @@ export interface Booking {
   createdAtUtc: string;
 }
 
+export interface BookingRequest {
+  playerName: string;
+  players: number;
+}
+
 export interface BookAttempt {
   status: number;
   replayed: boolean;
@@ -40,7 +45,7 @@ export async function book(teeTimeId: number, playerName: string, players: numbe
   const res = await fetch(`/api/tee-times/${teeTimeId}/bookings`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
-    body: JSON.stringify({ playerName, players }),
+    body: JSON.stringify({ playerName, players } satisfies BookingRequest),
   });
   const body = await res.json().catch(() => undefined);
   return res.ok

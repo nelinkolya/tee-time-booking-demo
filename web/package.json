@@ -8,6 +8,7 @@
     "lint": "oxlint --type-aware",
     "test": "vitest run",
     "build": "tsc --noEmit && vite build",
+    "api:types": "swagger-typescript-api generate -p openapi.json -o src -n api.gen.ts --no-client --enum-style=union --silent",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "jsdom": "29.1.1",
     "oxlint": "1.91.0",
     "oxlint-tsgolint": "7.0.2005",
+    "swagger-typescript-api": "13.13.0",
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "5.1.0"

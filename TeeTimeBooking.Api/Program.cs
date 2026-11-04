@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Text.Json.Serialization;
 using Azure.Monitor.OpenTelemetry.Exporter;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
@@ -14,10 +16,13 @@ using TeeTimeBooking.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// A Debug build runs this file up to Build() to write the OpenAPI document; it needs no database.
+var buildingOpenApiDocument = Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
+
 builder.Services.AddDbContext<BookingDb>(o => o
     .UseSqlServer(
         builder.Configuration.GetConnectionString("TeeTimes")
-            ?? throw new InvalidOperationException("Set ConnectionStrings:TeeTimes (dotnet user-secrets)."),
+            ?? (buildingOpenApiDocument ? "Server=none" : throw new InvalidOperationException("Set ConnectionStrings:TeeTimes (dotnet user-secrets).")),
         // A paused serverless database takes up to a minute to resume.
         sql => sql.EnableRetryOnFailure(maxRetryCount: 6, maxRetryDelay: TimeSpan.FromSeconds(15), errorNumbersToAdd: null))
     // Racing duplicates collide on the idempotency index by design; EF would log each one as an error.
@@ -55,6 +60,8 @@ else if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_EN
 {
     otel.UseOtlpExporter();
 }
+// Numbers only as JSON numbers: the web defaults also accept "2", and the OpenAPI document would say so.
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 builder.Services.AddProblemDetails();
 builder.Services.AddClientRateLimits(builder.Configuration);
 builder.Services.AddHealthChecks().AddDbContextCheck<BookingDb>("database");
@@ -82,7 +89,7 @@ if (args.Contains("--migrate"))
 }
 
 // Tests drop and migrate their own database.
-if (!app.Environment.IsEnvironment("Testing"))
+if (!app.Environment.IsEnvironment("Testing") && !buildingOpenApiDocument)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<BookingDb>();
