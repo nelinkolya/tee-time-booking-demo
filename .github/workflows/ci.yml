@@ -107,6 +107,44 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
+  # The UI's types are type-checked against the API's OpenAPI document (web/src/api.contract.ts, in Web build);
+  # this job proves the committed document and the types generated from it are those of the current code.
+  contract:
+    name: API contract
+    concurrency:
+      group: contract-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Write the OpenAPI document
+        run: dotnet build TeeTimeBooking.Api --configuration Debug
+
+      - name: Generate the types
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run api:types
+
+      - name: Check that both are committed as generated
+        run: |
+          if ! git diff --exit-code -- web/openapi.json web/src/api.gen.ts; then
+            echo "::error::The API contract changed: build the API in Debug, run 'npm run api:types' in web/ and commit both files."
+            exit 1
+          fi
+
   container:
     name: Docker image smoke test
     concurrency:
@@ -163,7 +201,7 @@ jobs:
     concurrency:
       group: publish-${{ github.ref }}
       cancel-in-progress: true
-    needs: [test, web-tests, web, container]
+    needs: [test, web-tests, web, contract, container]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20

@@ -42,6 +42,20 @@ public class CancellationTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task The_status_goes_out_by_name_as_the_UI_compares_it()
+    {
+        var teeTimeId = await api.NewTeeTimeAsync(capacity: 4);
+        var client = api.CreateClient();
+        var booking = await (await BookAsync(client, teeTimeId, "Alex", 2, Guid.NewGuid().ToString()))
+            .Content.ReadFromJsonAsync<BookingDto>();
+
+        var cancelled = await client.PostAsync($"/api/bookings/{booking!.Id}/cancel", null);
+
+        using var body = System.Text.Json.JsonDocument.Parse(await cancelled.Content.ReadAsStringAsync());
+        Assert.Equal("Cancelled", body.RootElement.GetProperty("status").GetString());
+    }
+
+    [Fact]
     public async Task Cancelling_an_unknown_booking_is_404()
     {
         var response = await api.CreateClient().PostAsync($"/api/bookings/{Guid.NewGuid()}/cancel", null);

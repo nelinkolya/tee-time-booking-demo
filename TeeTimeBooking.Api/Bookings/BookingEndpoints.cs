@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +8,14 @@ namespace TeeTimeBooking.Api.Bookings;
 
 public record TeeTimeDto(int Id, string Course, DateTime StartsAt, int Capacity, int BookedPlayers, int AvailableSpots);
 
-public record BookingDto(Guid Id, int TeeTimeId, string PlayerName, int Players, string Status, DateTime CreatedAtUtc);
+public record BookingDto(
+    Guid Id,
+    int TeeTimeId,
+    string PlayerName,
+    int Players,
+    // A name, not a number, on the wire; the OpenAPI document lists the names.
+    [property: JsonConverter(typeof(JsonStringEnumConverter<BookingStatus>))] BookingStatus Status,
+    DateTime CreatedAtUtc);
 
 public static class BookingEndpoints
 {
@@ -70,7 +78,7 @@ public static class BookingEndpoints
         var bookings = await db.Bookings.AsNoTracking()
             .Where(b => b.TeeTimeId == id)
             .OrderBy(b => b.CreatedAtUtc)
-            .Select(b => new BookingDto(b.Id, b.TeeTimeId, b.PlayerName, b.Players, b.Status.ToString(), b.CreatedAtUtc))
+            .Select(b => new BookingDto(b.Id, b.TeeTimeId, b.PlayerName, b.Players, b.Status, b.CreatedAtUtc))
             .ToListAsync(ct);
         return TypedResults.Ok(bookings);
     }
@@ -138,5 +146,5 @@ public static class BookingEndpoints
     }
 
     private static BookingDto ToDto(Booking b) =>
-        new(b.Id, b.TeeTimeId, b.PlayerName, b.Players, b.Status.ToString(), b.CreatedAtUtc);
+        new(b.Id, b.TeeTimeId, b.PlayerName, b.Players, b.Status, b.CreatedAtUtc);
 }

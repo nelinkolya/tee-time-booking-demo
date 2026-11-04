@@ -49,7 +49,7 @@ not `Guid.NewGuid()`: new rows append to the last page instead of splitting rand
 with SQL Server's own `ORDER BY Id` — .NET and SQL Server sort GUIDs differently, which is also why
 `Guid.CreateVersion7()` would not help here.
 
-## Tests — 43, against a real SQL Server
+## Tests — 44, against a real SQL Server
 
 Concurrency bugs don't show up against an in-memory provider, so the suite runs against SQL Server and fires
 requests through the real HTTP pipeline, all released at once from one gate.
@@ -64,6 +64,7 @@ requests through the real HTTP pipeline, all released at once from one gate.
 | copies that take the last spots | the losers get the booking, not `409` |
 | same key, different request | `422` |
 | 5 parallel cancels | spots freed once |
+| booking status on the wire | a name (`"Cancelled"`), as the UI compares it |
 | **naive check-then-insert** | **overbooks a 4-ball to 6 players** — why the service doesn't do that |
 | DB check constraint | rejects a counter above capacity |
 | **load:** 1,000 requests at once on one 4-ball | exactly 4 × `201`, 996 × `409` (~0.5 s) |
@@ -95,6 +96,18 @@ Each was checked by breaking the code it covers: every such change fails its tes
 which flag an async handler whose failure nobody would catch, and the React hooks rules. It is oxlint rather than
 ESLint because typescript-eslint needs the TypeScript compiler's JavaScript API, which TypeScript 7 no longer has;
 oxlint's type-aware rules run on TypeScript 7 itself.
+
+## API contract — the UI's types checked against the server
+
+The UI's types in `web/src/api.ts` are written by hand, and `web/src/api.contract.ts` makes `tsc` fail when one of
+them no longer matches the API. A Debug build of the API writes its OpenAPI document to `web/openapi.json`;
+`npm run api:types` generates TypeScript types from it (`web/src/api.gen.ts`, swagger-typescript-api), and the
+contract file asserts that each hand-written type and its generated twin are the same type. A renamed field, a
+lost `null` or a new status value on either side is then a build error, not a bug in the browser. The generated
+types are not used by the app itself, so `api.ts` stays plain.
+
+Both files are committed, so a contract change shows up in the pull request's diff. The **API contract** job builds
+the document and the types again and fails when the committed copies are stale.
 
 ## Run
 
@@ -148,15 +161,16 @@ deploy to; the role is Contributor on one resource group, and no secret is store
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every pull request — six jobs:
+GitHub Actions (`.github/workflows/ci.yml`), on every push to `main` and every pull request — seven jobs:
 
 | Job | What it proves |
 |---|---|
 | **Tests (SQL Server)** | all tests except the load tests, against a real SQL Server 2022 container; a results summary on the run page (GitHubActionsTestLogger), failures annotated at the test, and a `.trx` artifact |
 | **Web tests** | the UI tests pass (Vitest, React Testing Library) |
-| **Web build** | the React app passes the linter, type-checks and builds from the lockfile |
+| **Web build** | the React app passes the linter, type-checks (its types against the API contract too) and builds from the lockfile |
+| **API contract** | the committed OpenAPI document and the types generated from it match the current code |
 | **Docker image smoke test** | the image builds from the `Dockerfile`, runs in Production against SQL Server, migrates, reports `/health` healthy, serves the UI and the API, and leaves out the demo reset and the API docs |
-| **Publish image** | after all four pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
+| **Publish image** | after all five pass on `main`: the image is pushed to `ghcr.io` tagged with the commit and `latest` |
 | **Deploy to Azure** | after publishing: rolls the image out to Container Apps via OIDC and checks the new revision serves it |
 
 A newer push cancels the checks still running for an older one, but never a deployment: deployments run one at a
