@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { book, type BookAttempt, type TeeTime } from "../api";
+import { book, type BookAttempt, type TeeTime } from "../../api";
 import { BookingForm } from "./BookingForm";
 
-vi.mock("../api");
+vi.mock("../../api");
 
 const teeTime: TeeTime = { id: 7, course: "Riverside Links", startsAt: "2026-11-03T07:10:00", capacity: 4, bookedPlayers: 0, availableSpots: 4 };
 const full: BookAttempt = { status: 409, replayed: false, problem: { title: "Not enough free spots.", availableSpots: 0 } };

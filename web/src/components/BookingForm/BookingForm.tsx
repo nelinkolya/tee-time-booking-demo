@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { book, type BookAttempt, type TeeTime } from "../api";
+import { book, type BookAttempt, type TeeTime } from "../../api";
+import styles from "./BookingForm.module.css";
 
 export function BookingForm({ teeTime, onResult }: { teeTime: TeeTime; onResult: (a: BookAttempt) => void }) {
   const [name, setName] = useState("Alex");
@@ -25,7 +26,7 @@ export function BookingForm({ teeTime, onResult }: { teeTime: TeeTime; onResult:
 
   return (
     <form
-      className="book-form"
+      className={styles.form}
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
@@ -50,7 +51,7 @@ export function BookingForm({ teeTime, onResult }: { teeTime: TeeTime; onResult:
         </select>
       </label>
       <button type="submit">Book</button>
-      <span className="key" title="Idempotency-Key for this attempt">key {key.slice(0, 8)}</span>
+      <span className={styles.key} title="Idempotency-Key for this attempt">key {key.slice(0, 8)}</span>
     </form>
   );
 }

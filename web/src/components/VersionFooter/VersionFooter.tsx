@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { getVersion, type AppVersion } from "../api";
+import { getVersion, type AppVersion } from "../../api";
+import styles from "./VersionFooter.module.css";
 
 const repoUrl = "https://github.com/nelinkolya/tee-time-booking-demo";
 
@@ -13,7 +14,7 @@ export function VersionFooter() {
   const commit = version.commit?.slice(0, 7);
   const built = version.builtAtUtc && new Date(version.builtAtUtc).toISOString().slice(0, 16).replace("T", " ");
   return (
-    <footer className="version">
+    <footer className={styles.footer}>
       v{version.version}
       {commit && (
         <>

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { book, type BookAttempt, type TeeTime } from "../api";
-import type { LogEntry } from "../log";
-import { inPool } from "../pool";
+import { book, type BookAttempt, type TeeTime } from "../../api";
+import type { LogEntry } from "../../log";
+import { inPool } from "../../pool";
+import styles from "./StressPanel.module.css";
 
 export function StressPanel({ teeTime, onResults }: { teeTime: TeeTime; onResults: (lines: LogEntry[]) => void }) {
   const [busy, setBusy] = useState(false);
@@ -32,7 +33,7 @@ export function StressPanel({ teeTime, onResults }: { teeTime: TeeTime; onResult
   };
 
   return (
-    <div className="stress">
+    <div className={styles.panel}>
       <h3>Try to break it</h3>
       <select value={rush} onChange={(e) => setRush(Number(e.target.value))} disabled={busy} aria-label="Players in the rush">
         {[20, 1000].map((n) => (

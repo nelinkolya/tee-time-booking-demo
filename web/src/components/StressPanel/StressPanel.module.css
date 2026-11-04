@@ -1,0 +1,2 @@
+.panel { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.panel h3 { width: 100%; }
