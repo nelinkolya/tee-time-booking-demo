@@ -41,7 +41,7 @@ describe("App", () => {
     expect(signals.get("2026-11-04")?.aborted).toBe(true);
     expect(screen.queryByText("09:00")).not.toBeInTheDocument();
     expect(screen.getByText("07:10")).toBeInTheDocument();
-    expect(container.querySelector(".error")).toBeNull();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows a failed cancel instead of losing it", async () => {

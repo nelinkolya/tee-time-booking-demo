@@ -1,0 +1,7 @@
+.page { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+.lede { color: var(--muted); max-width: 70ch; margin: 0 0 16px; }
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+.error { color: var(--conflict); }
+
+.columns { display: grid; grid-template-columns: 220px 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .columns { grid-template-columns: 1fr; } }

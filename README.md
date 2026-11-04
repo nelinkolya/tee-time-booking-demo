@@ -97,6 +97,11 @@ which flag an async handler whose failure nobody would catch, and the React hook
 ESLint because typescript-eslint needs the TypeScript compiler's JavaScript API, which TypeScript 7 no longer has;
 oxlint's type-aware rules run on TypeScript 7 itself.
 
+Each component has its own folder in `web/src/components/` with its **CSS Module** (`SlotList.module.css` next to
+`SlotList.tsx`) and its tests. Vite gives module classes unique names (`.slot` becomes `_slot_594cn_2`), so a
+component's styles apply to that component only and leave with it when it is deleted. `web/src/styles.css` keeps
+only what is shared: the colour tokens, base elements and the button variants.
+
 ## API contract — the UI's types checked against the server
 
 The UI's types in `web/src/api.ts` are written by hand, and `web/src/api.contract.ts` makes `tsc` fail when one of

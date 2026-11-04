@@ -1,0 +1,7 @@
+/* One class per LogLine kind: the component picks it by name. */
+.list { display: grid; gap: 4px; font-family: ui-monospace, monospace; font-size: 0.82rem; max-height: 70vh; overflow-y: auto; }
+.list li { padding: 4px 8px; border-left: 3px solid var(--line); }
+.list .ok { border-color: var(--ok); }
+.list .replay { border-color: var(--replay); color: var(--replay); }
+.list .conflict { border-color: var(--conflict); color: var(--conflict); }
+.list .error { border-color: var(--conflict); }

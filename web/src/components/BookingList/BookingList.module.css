@@ -1,0 +1,2 @@
+.list li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cancelled span:first-child { text-decoration: line-through; color: var(--muted); }

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cancel, getBookings, getTeeTimes, resetDemo, type Booking, type TeeTime } from "./api";
-import { BookingForm } from "./components/BookingForm";
-import { BookingList } from "./components/BookingList";
-import { ResponseLog } from "./components/ResponseLog";
-import { SlotList } from "./components/SlotList";
-import { StressPanel } from "./components/StressPanel";
-import { VersionFooter } from "./components/VersionFooter";
+import styles from "./App.module.css";
+import { BookingForm } from "./components/BookingForm/BookingForm";
+import { BookingList } from "./components/BookingList/BookingList";
+import { ResponseLog } from "./components/ResponseLog/ResponseLog";
+import { SlotList } from "./components/SlotList/SlotList";
+import { StressPanel } from "./components/StressPanel/StressPanel";
+import { VersionFooter } from "./components/VersionFooter/VersionFooter";
 import { time, today } from "./format";
 import { describe, type LogEntry, type LogLine } from "./log";
 
@@ -63,14 +64,14 @@ export function App() {
     setLog((prev) => [...lines.map((l) => ({ ...l, id: nextLogId.current++ })), ...prev].slice(0, 60));
 
   return (
-    <div className="page">
+    <div className={styles.page}>
       <header>
         <h1>Tee Time Booking</h1>
-        <p className="lede">
+        <p className={styles.lede}>
           A four-ball holds four players. Each booking claims its spots with one conditional UPDATE, and every attempt carries
           an idempotency key — so neither a rush of players nor a double-click can overbook a slot.
         </p>
-        <div className="toolbar">
+        <div className={styles.toolbar}>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           {import.meta.env.DEV && (
             <>
@@ -83,13 +84,17 @@ export function App() {
             </>
           )}
         </div>
-        {error && <p className="error">{error}</p>}
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
       </header>
 
-      <main>
+      <main className={styles.columns}>
         <SlotList date={date} teeTimes={teeTimes} selectedId={selectedId} onSelect={setSelectedId} />
 
-        <section className="detail">
+        <section>
           {selected ? (
             <>
               <h2>
