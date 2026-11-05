@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { cancel, getBookings, getTeeTimes, resetDemo, type Booking, type TeeTime } from "./api";
+import { useRef, useState } from "react";
+import { cancel, resetDemo } from "./api";
 import styles from "./App.module.css";
 import { BookingForm } from "./components/BookingForm/BookingForm";
 import { BookingList } from "./components/BookingList/BookingList";
@@ -8,57 +8,17 @@ import { SlotList } from "./components/SlotList/SlotList";
 import { StressPanel } from "./components/StressPanel/StressPanel";
 import { VersionFooter } from "./components/VersionFooter/VersionFooter";
 import { time, today } from "./format";
+import { useTeeTimes } from "./hooks/useTeeTimes";
 import { describe, type LogEntry, type LogLine } from "./log";
 
 export function App() {
   const [date, setDate] = useState(today);
-  const [teeTimes, setTeeTimes] = useState<TeeTime[]>([]);
   const [selectedId, setSelectedId] = useState<number>();
-  const [bookings, setBookings] = useState<Booking[]>([]);
   const [log, setLog] = useState<LogLine[]>([]);
-  const [error, setError] = useState<string>();
   const nextLogId = useRef(0);
+  const { teeTimes, bookings, error, refresh, change } = useTeeTimes(date, selectedId);
 
   const selected = teeTimes.find((t) => t.id === selectedId);
-
-  const refresh = useCallback(async (signal?: AbortSignal) => {
-    try {
-      setTeeTimes(await getTeeTimes(date, signal));
-      if (selectedId !== undefined) setBookings(await getBookings(selectedId, signal));
-      setError(undefined);
-    } catch (e) {
-      if (signal?.aborted) return; // superseded by a newer refresh, not an error
-      setError(String(e));
-    }
-  }, [date, selectedId]);
-
-  // A newer date or tee time aborts the request still loading, so a slow stale response cannot overwrite it.
-  useEffect(() => {
-    const controller = new AbortController();
-    // oxlint-disable-next-line react/set-state-in-effect -- syncing with the server: refresh sets state only once it answers
-    void refresh(controller.signal);
-    return () => controller.abort();
-  }, [refresh]);
-
-  // Event handlers do not await these, so each one shows its own failure instead of losing it.
-  const cancelBooking = async (id: string) => {
-    try {
-      await cancel(id);
-      await refresh();
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
-  const resetDemoAndRefresh = async () => {
-    try {
-      await resetDemo();
-      setLog([]);
-      await refresh();
-    } catch (e) {
-      setError(String(e));
-    }
-  };
 
   const addLog = (lines: LogEntry[]) =>
     setLog((prev) => [...lines.map((l) => ({ ...l, id: nextLogId.current++ })), ...prev].slice(0, 60));
@@ -75,7 +35,7 @@ export function App() {
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           {import.meta.env.DEV && (
             <>
-              <button className="secondary" onClick={() => void resetDemoAndRefresh()}>
+              <button className="secondary" onClick={() => void change(async () => { await resetDemo(); setLog([]); })}>
                 Reset demo
               </button>
               <a href="/swagger" target="_blank" rel="noreferrer">
@@ -103,7 +63,7 @@ export function App() {
               {/* A different tee time is a different attempt: a new form, so a new idempotency key. */}
               <BookingForm key={selected.id} teeTime={selected} onResult={(a) => { addLog([describe(a)]); void refresh(); }} />
               <StressPanel teeTime={selected} onResults={(lines) => { addLog(lines); void refresh(); }} />
-              <BookingList bookings={bookings} onCancel={(id) => void cancelBooking(id)} />
+              <BookingList bookings={bookings} onCancel={(id) => void change(() => cancel(id))} />
             </>
           ) : (
             <p className="muted">Pick a tee time.</p>
