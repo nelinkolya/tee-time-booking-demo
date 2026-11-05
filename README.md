@@ -86,6 +86,7 @@ in step 3 fails the "last spots" test.
 | booking form, no answer from the server | the failure is logged and the key is kept, so trying again is still a retry |
 | a different tee time | the form starts over with a new key |
 | cancel that fails | the error is shown on the page, not lost as an unhandled rejection |
+| a change on the server (`useTeeTimes`) | the tee times are read again after it succeeds; after a failure the error is shown and nothing is re-read |
 | date changed while the previous day is still loading | the stale request is aborted and its late answer never replaces the newer one |
 | `inPool` | at most `limit` requests in flight, results in call order, a failure does not stop the rest |
 | `today()` | the local date, not UTC — the tests run in Kyiv time, since CI runners are UTC |
@@ -101,6 +102,11 @@ Each component has its own folder in `web/src/components/` with its **CSS Module
 `SlotList.tsx`) and its tests. Vite gives module classes unique names (`.slot` becomes `_slot_594cn_2`), so a
 component's styles apply to that component only and leave with it when it is deleted. `web/src/styles.css` keeps
 only what is shared: the colour tokens, base elements and the button variants.
+
+Loading is in one hook, `web/src/hooks/useTeeTimes.ts`: the tee times of the chosen day and the bookings of the
+chosen tee time, the abort of a request that a newer one replaced, and `change(action)` — run something on the
+server, then read the state again instead of patching it in the browser, since other players book too. `App`
+keeps only what the page itself chose: the date, the tee time and the log.
 
 ## API contract — the UI's types checked against the server
 
