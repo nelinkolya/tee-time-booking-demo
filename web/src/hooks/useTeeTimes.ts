@@ -9,8 +9,13 @@ export function useTeeTimes(date: string, selectedId: number | undefined) {
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
-      setTeeTimes(await getTeeTimes(date, signal));
-      if (selectedId !== undefined) setBookings(await getBookings(selectedId, signal));
+      // Both at once, and one render when both have answered.
+      const [day, ofSelected] = await Promise.all([
+        getTeeTimes(date, signal),
+        selectedId === undefined ? undefined : getBookings(selectedId, signal),
+      ]);
+      setTeeTimes(day);
+      if (ofSelected) setBookings(ofSelected);
       setError(undefined);
     } catch (e) {
       if (signal?.aborted) return; // superseded by a newer refresh, not an error
