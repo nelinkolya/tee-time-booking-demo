@@ -104,7 +104,7 @@ component's styles apply to that component only and leave with it when it is del
 only what is shared: the colour tokens, base elements and the button variants.
 
 Loading is in one hook, `web/src/hooks/useTeeTimes.ts`: the tee times of the chosen day and the bookings of the
-chosen tee time, the abort of a request that a newer one replaced, and `change(action)` — run something on the
+chosen tee time (asked for at once, shown together), the abort of a request that a newer one replaced, and `change(action)` — run something on the
 server, then read the state again instead of patching it in the browser, since other players book too. `App`
 keeps only what the page itself chose: the date, the tee time and the log.
 

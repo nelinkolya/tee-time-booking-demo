@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getTeeTimes, type TeeTime } from "../api";
+import { getBookings, getTeeTimes, type Booking, type TeeTime } from "../api";
 import { useTeeTimes } from "./useTeeTimes";
 
 vi.mock("../api");
@@ -35,6 +35,22 @@ describe("useTeeTimes", () => {
     expect(signals.get("2026-11-04")?.aborted).toBe(true);
     expect(result.current.teeTimes).toEqual([slot(2, "2026-11-05T07:10:00")]);
     expect(result.current.error).toBeUndefined();
+  });
+
+  it("asks for the tee times and the bookings at once and shows both together", async () => {
+    let answerTeeTimes!: (teeTimes: TeeTime[]) => void;
+    vi.mocked(getTeeTimes).mockReturnValue(new Promise((resolve) => (answerTeeTimes = resolve)));
+    const booking: Booking = { id: "b1", teeTimeId: 1, playerName: "Alex", players: 2, status: "Confirmed", createdAtUtc: "2026-11-05T06:00:00Z" };
+    vi.mocked(getBookings).mockResolvedValue([booking]);
+    const { result } = renderHook(() => useTeeTimes("2026-11-05", 1));
+
+    // The bookings are asked for while the tee times have not answered yet.
+    await waitFor(() => expect(getBookings).toHaveBeenCalledWith(1, expect.any(AbortSignal)));
+    expect(result.current.bookings).toEqual([]);
+
+    await act(async () => answerTeeTimes([slot(1, "2026-11-05T07:10:00")]));
+    expect(result.current.teeTimes).toEqual([slot(1, "2026-11-05T07:10:00")]);
+    expect(result.current.bookings).toEqual([booking]);
   });
 
   it("reads the tee times again after a change succeeds", async () => {
