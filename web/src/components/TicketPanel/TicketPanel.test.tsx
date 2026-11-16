@@ -39,6 +39,32 @@ describe("TicketPanel", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("changed after it was signed");
   });
 
+  it("drops an answer for text that changed while it was on its way", async () => {
+    let answer!: (r: Awaited<ReturnType<typeof verifyTicket>>) => void;
+    vi.mocked(verifyTicket).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const user = userEvent.setup();
+    render(<TicketPanel token={token} onLog={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: "Verify" }));
+    await user.click(screen.getByRole("button", { name: "Change a byte" }));
+    answer({ ok: true, check: { ...check, status: "Confirmed" } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("logs a copy the browser refused instead of seeming to do nothing", async () => {
+    const onLog = vi.fn();
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("NotAllowedError"));
+    render(<TicketPanel token={token} onLog={onLog} />);
+
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(onLog).toHaveBeenCalledWith({ kind: "error", text: "Copy failed: Error: NotAllowedError" });
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+
   it("says a validly signed ticket's booking was cancelled", async () => {
     vi.mocked(verifyTicket).mockResolvedValue({ ok: true, check: { ...check, status: "Cancelled" } });
     const user = userEvent.setup();

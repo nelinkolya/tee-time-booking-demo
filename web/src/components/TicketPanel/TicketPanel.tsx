@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { verifyTicket, type VerifyResult } from "../../api";
 import { time } from "../../format";
 import type { LogEntry } from "../../log";
@@ -21,19 +21,24 @@ export function TicketPanel({ token, onLog }: { token?: string; onLog: (entry: L
   const [result, setResult] = useState<VerifyResult>();
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Bumped by every edit: an answer for text that has since changed is dropped, not shown next to the new text.
+  const version = useRef(0);
 
   const decoded = decodeTicket(text);
 
   const edit = (value: string) => {
+    version.current++;
     setText(value);
     setResult(undefined);
     setCopied(false);
   };
 
   const verify = async () => {
+    const asked = version.current;
     setBusy(true);
     try {
       const r = await verifyTicket(text.trim());
+      if (asked !== version.current) return;
       setResult(r);
       onLog(
         r.ok
@@ -48,8 +53,13 @@ export function TicketPanel({ token, onLog }: { token?: string; onLog: (entry: L
   };
 
   const copy = async () => {
-    await navigator.clipboard.writeText(text.trim());
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(text.trim());
+      setCopied(true);
+    } catch (e) {
+      // No permission, an insecure origin, or the page not focused: say so rather than seem to do nothing.
+      onLog({ kind: "error", text: `Copy failed: ${String(e)}` });
+    }
   };
 
   return (
