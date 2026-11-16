@@ -68,13 +68,11 @@ public sealed class CachedRead<T>(
                 _state = new State(fresh, clock.GetUtcNow(), now, state.Attempts + 1);
                 return fresh;
             }
-            catch (Exception) when (state.Value is not null)
+            // Whatever the vault or the network threw (RequestFailedException, an authentication failure, a timeout):
+            // fall back to the value there was, or report the vault unavailable. Fatal runtime errors pass through.
+            catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException))
             {
-                return state.Value; // stale, but tickets signed with these keys still verify
-            }
-            catch (Exception ex)
-            {
-                throw new KeyVaultUnavailableException(ex);
+                return state.Value ?? throw new KeyVaultUnavailableException(ex); // stale keys still verify issued tickets
             }
         }
         finally

@@ -30,12 +30,16 @@ az keyvault key list-versions --vault-name $vault -n ticket-signing --query "[].
 # who may use it: the app's identity, the custom Ticket Signer role (read + sign), on this key only
 az role assignment list --scope "$(az keyvault show -n $vault --query id -o tsv)/keys/ticket-signing" -o table
 
-# rotate now: new tickets get the new kid, old ones still verify (/.well-known/jwks.json lists both)
+# rotate now (the policy rotates once a year, $1 each; by hand it is a few operations): new tickets get the new
+# kid, old ones still verify (/.well-known/jwks.json lists both)
 az keyvault key rotate --vault-name $vault -n ticket-signing
 
 # retire a version: tickets it signed fail with reason UnknownKey once the app's key cache expires (10 minutes)
 az keyvault key set-attributes --vault-name $vault -n ticket-signing --version <version> --enabled false
 ```
+
+The alert `alert-teetime-vault-busy` emails when the vault answers over 2,000 requests in an hour: signatures are
+billed, and normal use is tens an hour.
 
 Who did what with the key, in Log Analytics:
 

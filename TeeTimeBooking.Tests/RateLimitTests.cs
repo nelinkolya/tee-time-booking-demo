@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
+using TeeTimeBooking.Api.Bookings;
 using static TeeTimeBooking.Tests.ApiFixture;
 
 namespace TeeTimeBooking.Tests;
@@ -31,6 +33,28 @@ public class RateLimitTests(ApiFixture api)
             Assert.Equal("application/problem+json", r.Content.Headers.ContentType?.MediaType);
         });
         Assert.Equal(3, (await api.LoadTeeTimeAsync(teeTimeId)).BookedPlayers);
+    }
+
+    [Fact]
+    public async Task Tickets_have_their_own_tighter_limit()
+    {
+        var teeTimeId = await api.NewTeeTimeAsync();
+        var booking = await (await BookAsync(api.CreateClient(), teeTimeId, "Alex", 1, Guid.NewGuid().ToString()))
+            .Content.ReadFromJsonAsync<BookingDto>();
+        var limited = api.WithWebHostBuilder(b => b
+            .UseSetting("RateLimiting:Enabled", "true")
+            .UseSetting("RateLimiting:TicketPermitsPerMinute", "2"));
+        var client = limited.CreateClient();
+
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 3; i++)
+        {
+            statuses.Add((await client.GetAsync($"/api/bookings/{booking!.Id}/ticket")).StatusCode);
+        }
+        var otherReads = await client.GetAsync("/api/tee-times");
+
+        Assert.Equal([HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.TooManyRequests], statuses);
+        Assert.Equal(HttpStatusCode.OK, otherReads.StatusCode);
     }
 
     [Fact]

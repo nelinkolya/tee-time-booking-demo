@@ -19,7 +19,7 @@ public class TicketRotationTests
     public async Task A_ticket_from_a_key_version_newer_than_the_cache_verifies_at_once()
     {
         var vault = new VaultLikeKeys(_clock);
-        var tickets = new TicketService(db: null!, vault, _clock); // verification never touches the database
+        var tickets = new TicketService(db: null!, vault, new IssuedTickets(), _clock); // verification never touches the database
         await vault.GetPublicKeysAsync(refresh: false, default); // cache filled before the rotation
         // Within 30 s of a read no refresh is allowed, so a version that appeared in that window waits for the next
         // one. The app's own signer never hits it: it adds a new version to the keys before signing with it.
@@ -36,7 +36,7 @@ public class TicketRotationTests
     public async Task Forged_kids_are_rejected_with_at_most_one_vault_read_per_interval()
     {
         var vault = new VaultLikeKeys(_clock);
-        var tickets = new TicketService(db: null!, vault, _clock);
+        var tickets = new TicketService(db: null!, vault, new IssuedTickets(), _clock);
         await vault.GetPublicKeysAsync(refresh: false, default);
         _clock.Advance(TimeSpan.FromMinutes(1));
         var readsBefore = vault.Reads;

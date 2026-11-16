@@ -112,6 +112,25 @@ public class TicketTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Asking_again_for_a_ticket_costs_no_new_signature_until_the_key_rotates()
+    {
+        // In Azure every signature is a billed Key Vault operation ($0.15 per 10,000 for an EC key).
+        var keys = api.Services.GetRequiredService<LocalTicketKeys>();
+        var (client, booking) = await BookedAsync();
+        var before = keys.Signatures;
+
+        var tickets = new[] { await TicketAsync(client, booking.Id), await TicketAsync(client, booking.Id), await TicketAsync(client, booking.Id) };
+        var signedOnce = keys.Signatures - before;
+        keys.Rotate();
+        var afterRotation = await TicketAsync(client, booking.Id);
+
+        Assert.Equal(1, signedOnce);
+        Assert.Single(tickets.Distinct());
+        Assert.NotEqual(tickets[0], afterRotation);
+        Assert.Equal(2, keys.Signatures - before);
+    }
+
+    [Fact]
     public async Task No_ticket_for_an_unknown_booking_and_no_pass_for_garbage()
     {
         var client = api.CreateClient();

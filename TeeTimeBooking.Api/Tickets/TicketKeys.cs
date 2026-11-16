@@ -105,6 +105,7 @@ public sealed class LocalTicketKeys : ITicketKeys
 {
     private readonly ConcurrentDictionary<string, ECDsa> _versions = new();
     private string _current = "";
+    private int _signatures;
 
     public LocalTicketKeys() => Rotate();
 
@@ -120,11 +121,17 @@ public sealed class LocalTicketKeys : ITicketKeys
     /// <summary>Like disabling a version in Key Vault: what it signed no longer verifies.</summary>
     public void Disable(string kid) => _versions.TryRemove(kid, out _);
 
+    /// <summary>How many signatures were made: what Key Vault would bill.</summary>
+    public int Signatures => _signatures;
+
     public Task<string> GetCurrentKidAsync(CancellationToken ct) => Task.FromResult(_current);
 
     // IEEE P1363 (r‖s) is .NET's default format, and what Key Vault returns and JWS expects.
-    public Task<byte[]> SignAsync(string kid, byte[] data, CancellationToken ct) =>
-        Task.FromResult(_versions[kid].SignData(data, HashAlgorithmName.SHA256));
+    public Task<byte[]> SignAsync(string kid, byte[] data, CancellationToken ct)
+    {
+        Interlocked.Increment(ref _signatures);
+        return Task.FromResult(_versions[kid].SignData(data, HashAlgorithmName.SHA256));
+    }
 
     public Task<IReadOnlyDictionary<string, ECParameters>> GetPublicKeysAsync(bool refresh, CancellationToken ct) =>
         Task.FromResult<IReadOnlyDictionary<string, ECParameters>>(

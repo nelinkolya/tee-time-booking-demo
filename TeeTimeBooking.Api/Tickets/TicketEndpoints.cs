@@ -46,7 +46,8 @@ public static class TicketEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status429TooManyRequests)
-            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
+            .RequireRateLimiting(RateLimits.Tickets); // a new ticket is a billed signature in Key Vault
 
         api.MapPost("/tickets/verify", VerifyTicket)
             .WithSummary("Check a ticket's signature and its booking's current status")

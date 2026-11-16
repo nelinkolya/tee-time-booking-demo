@@ -38,6 +38,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<BookingTelemetry>();
 builder.Services.AddScoped<BookingService>();
 builder.Services.AddScoped<TicketService>();
+builder.Services.AddSingleton<IssuedTickets>();
 
 // Tickets are signed in Key Vault when one is configured (Azure), otherwise with a key in memory that a restart loses.
 var ticketVault = builder.Configuration["TicketSigning:VaultUri"];

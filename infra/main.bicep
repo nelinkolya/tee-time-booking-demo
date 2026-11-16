@@ -100,8 +100,10 @@ resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-// EC P-256 for ES256. Rotated every 90 days; old versions stay enabled, so tickets they signed still verify.
-// Created once: deploying again neither replaces the key nor adds a version.
+// EC P-256 for ES256. Rotated once a year: each automated rotation is billed ($1), and the whole subscription's
+// budget is $5 a year. Rotating by hand (`az keyvault key rotate`) is not billed beyond its operations. Old versions
+// stay enabled, so tickets they signed still verify. Created once: deploying again neither replaces the key nor
+// adds a version.
 resource ticketKey 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
   parent: vault
   name: 'ticket-signing'
@@ -110,9 +112,9 @@ resource ticketKey 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
     curveName: 'P-256'
     keyOps: [ 'sign', 'verify' ]
     rotationPolicy: {
-      attributes: { expiryTime: 'P1Y' }
+      attributes: { expiryTime: 'P2Y' } // a version left unrotated stops signing after two years
       lifetimeActions: [
-        { trigger: { timeAfterCreate: 'P90D' }, action: { type: 'rotate' } }
+        { trigger: { timeAfterCreate: 'P1Y' }, action: { type: 'rotate' } }
         { trigger: { timeBeforeExpiry: 'P30D' }, action: { type: 'notify' } }
       ]
     }
@@ -309,6 +311,38 @@ resource alwaysOn 'Microsoft.Insights/metricAlerts@2018-03-01' = {
       ]
     }
     autoMitigate: true // resolves itself once the app scales to zero again
+    actions: [ { actionGroupId: owner.id } ]
+  }
+}
+
+// Key Vault bills per operation, and a signature with the EC ticket key costs $0.15 per 10,000. The app signs once per
+// booking and key version and reads its keys a few times an hour, so normal use is tens of operations an hour; two
+// thousand means something is calling it in a loop. Fires within the quarter-hour, long before the budget would.
+resource vaultBusy 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-teetime-vault-busy'
+  location: 'global'
+  properties: {
+    description: 'Key Vault answered over 2,000 requests in an hour: ticket signatures are billed, and normal use is tens an hour.'
+    severity: 2
+    enabled: true
+    scopes: [ vault.id ]
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT1H'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'vault-requests'
+          metricNamespace: 'Microsoft.KeyVault/vaults'
+          metricName: 'ServiceApiHit'
+          timeAggregation: 'Total'
+          operator: 'GreaterThan'
+          threshold: 2000
+        }
+      ]
+    }
+    autoMitigate: true
     actions: [ { actionGroupId: owner.id } ]
   }
 }
