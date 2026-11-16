@@ -28,7 +28,8 @@ public interface ITicketKeys
 
 /// <summary>
 /// Azure Key Vault: the private key never leaves the vault; the app may only sign with it and read the public parts
-/// (role "Key Vault Crypto User" on this key). Disabling a version in the vault retires the tickets it signed.
+/// (a custom role with keys/read and keys/sign/action on this key, infra/main.bicep). Disabling a version in the vault
+/// retires the tickets it signed.
 /// </summary>
 public sealed class KeyVaultTicketKeys : ITicketKeys
 {

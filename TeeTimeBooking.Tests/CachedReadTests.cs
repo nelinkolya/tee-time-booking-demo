@@ -14,6 +14,7 @@ public class CachedReadTests
 
     private readonly FakeTimeProvider _clock = new();
     private int _reads;
+    private bool _vaultDown;
 
     private CachedRead<string> NewCache(TimeSpan? readTakes = null) => new(async ct =>
     {
@@ -22,7 +23,7 @@ public class CachedReadTests
         {
             await Task.Delay(delay, ct);
         }
-        return $"read {n}";
+        return _vaultDown ? throw new HttpRequestException("vault down") : $"read {n}";
     }, Ttl, MinRefreshInterval, _clock);
 
     [Fact]
@@ -52,6 +53,41 @@ public class CachedReadTests
 
         Assert.Equal(2, _reads);
         Assert.All(values, v => Assert.Equal("read 2", v));
+    }
+
+    [Fact]
+    public async Task A_vault_outage_costs_one_attempt_per_interval_and_keeps_the_last_value()
+    {
+        var cache = NewCache();
+        await cache.GetAsync(refresh: false, default);
+        _vaultDown = true;
+        _clock.Advance(Ttl);
+
+        var values = new List<string>();
+        for (var i = 0; i < 50; i++)
+        {
+            values.Add(await cache.GetAsync(refresh: i % 2 == 0, default));
+        }
+        _clock.Advance(MinRefreshInterval);
+        await cache.GetAsync(refresh: true, default);
+
+        Assert.All(values, v => Assert.Equal("read 1", v));
+        Assert.Equal(3, _reads); // the first fill, one failed attempt, one more after the interval
+    }
+
+    [Fact]
+    public async Task With_nothing_cached_a_vault_outage_still_costs_one_attempt_per_interval()
+    {
+        var cache = NewCache();
+        _vaultDown = true;
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => cache.GetAsync(refresh: false, default));
+        for (var i = 0; i < 50; i++)
+        {
+            await Assert.ThrowsAsync<KeyVaultUnavailableException>(() => cache.GetAsync(refresh: true, default));
+        }
+
+        Assert.Equal(1, _reads);
     }
 
     [Fact]

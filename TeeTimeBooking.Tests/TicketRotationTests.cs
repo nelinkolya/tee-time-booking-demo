@@ -83,7 +83,8 @@ public class TicketRotationTests
         {
             var header = Encode(new { alg = "ES256", typ = "JWT", kid });
             var payload = Encode(new TicketClaims(Guid.NewGuid(), 1, 2, new DateTime(2030, 1, 1, 8, 0, 0), 0));
-            var key = _inVault.GetValueOrDefault(kid) ?? ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            using var stranger = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            var key = _inVault.GetValueOrDefault(kid) ?? stranger;
             var signature = key.SignData(Encoding.ASCII.GetBytes($"{header}.{payload}"), HashAlgorithmName.SHA256);
             return $"{header}.{payload}.{Base64Url.EncodeToString(signature)}";
         }

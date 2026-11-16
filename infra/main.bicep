@@ -203,14 +203,35 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
   }
 }
 
-// The app may sign with the ticket key and read its public parts: on this key only, not the vault. The private
-// key cannot be read by anyone; the migration job gets nothing here.
-var keyVaultCryptoUser = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12338af0-0e69-4776-bea7-57ae8d297424')
+// The app may read the ticket key's public parts and sign with it, on this key only. Nothing else: the built-in
+// "Key Vault Crypto User" would also let it update, back up, encrypt or decrypt with the key, and so disable its
+// versions. Nobody can read the private key; the migration job gets nothing here.
+resource ticketSigner 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
+  name: guid(resourceGroup().id, 'ticket-signer')
+  properties: {
+    roleName: 'Ticket Signer (${resourceGroup().name})' // role names are unique per tenant
+    description: 'Read a Key Vault key and its public part, and sign with it. No other key operation.'
+    type: 'CustomRole'
+    permissions: [
+      {
+        actions: []
+        notActions: []
+        dataActions: [
+          'Microsoft.KeyVault/vaults/keys/read'
+          'Microsoft.KeyVault/vaults/keys/sign/action'
+        ]
+        notDataActions: []
+      }
+    ]
+    assignableScopes: [ resourceGroup().id ]
+  }
+}
+
 resource appSignsTickets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(ticketKey.id, app.id, keyVaultCryptoUser)
+  name: guid(ticketKey.id, app.id, ticketSigner.id)
   scope: ticketKey
   properties: {
-    roleDefinitionId: keyVaultCryptoUser
+    roleDefinitionId: ticketSigner.id
     principalId: app.identity.principalId
     principalType: 'ServicePrincipal'
   }

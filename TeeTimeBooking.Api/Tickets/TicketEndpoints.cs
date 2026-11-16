@@ -41,7 +41,8 @@ public static class TicketEndpoints
             .WithSummary("A signed ticket for a confirmed booking")
             .WithDescription(
                 "A JWT (ES256) stating the booking, its tee time and players. Check it with `POST /api/tickets/verify`, " +
-                "or offline against the keys at `/.well-known/jwks.json`.")
+                "or offline against the keys at `/.well-known/jwks.json`.\n\n" +
+                "A ticket proves the booking was confirmed, not who holds it: there is no sign-in, so anyone with the booking id can get one.")
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status429TooManyRequests);

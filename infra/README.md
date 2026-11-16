@@ -27,7 +27,7 @@ vault=$(az keyvault list -g rg-teetime-demo --query "[0].name" -o tsv)
 az keyvault key show --vault-name $vault -n ticket-signing --query "{kid:key.kid, crv:key.crv}"
 az keyvault key list-versions --vault-name $vault -n ticket-signing --query "[].{kid:kid, enabled:attributes.enabled}" -o table
 
-# who may use it: the app's identity, Key Vault Crypto User, on this key only
+# who may use it: the app's identity, the custom Ticket Signer role (read + sign), on this key only
 az role assignment list --scope "$(az keyvault show -n $vault --query id -o tsv)/keys/ticket-signing" -o table
 
 # rotate now: new tickets get the new kid, old ones still verify (/.well-known/jwks.json lists both)

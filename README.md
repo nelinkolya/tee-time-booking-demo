@@ -49,7 +49,7 @@ not `Guid.NewGuid()`: new rows append to the last page instead of splitting rand
 with SQL Server's own `ORDER BY Id` — .NET and SQL Server sort GUIDs differently, which is also why
 `Guid.CreateVersion7()` would not help here.
 
-## Tests — 61, against a real SQL Server
+## Tests — 63, against a real SQL Server
 
 Concurrency bugs don't show up against an in-memory provider, so the suite runs against SQL Server and fires
 requests through the real HTTP pipeline, all released at once from one gate.
@@ -72,6 +72,7 @@ requests through the real HTTP pipeline, all released at once from one gate.
 | key rotation | tickets signed before it still verify, until that key version is retired |
 | forged tickets on the open verify endpoint | unknown kids cost one vault read per 30 s, shared by parallel callers; a 4 MB token is refused by length |
 | a key version newer than the cache | its tickets verify at once |
+| Key Vault down | one attempt per 30 s, the last keys kept |
 | API compiled with .NET 11 runtime async | no compiler state machine on `BookAsync`: the `runtime-async=on` switch is still there |
 | **load:** 1,000 requests at once on one 4-ball | exactly 4 × `201`, 996 × `409` (~0.5 s) |
 | **load:** 1,100 requests over 100 tee times, every 10th sent twice with the same key | no slot over capacity, counters match bookings, no key booked twice |
@@ -262,7 +263,8 @@ booked, not that it still stands.
 In Azure the key is an EC P-256 key in **Key Vault** (`TicketSigning:VaultUri`, `infra/main.bicep`):
 
 - **The private key never leaves the vault.** The app sends a SHA-256 digest and gets a signature back; its
-  managed identity holds *Key Vault Crypto User* on this one key, not on the vault, and no role can export it.
+  managed identity holds a custom *Ticket Signer* role on this one key: read it and sign with it, nothing else
+  (the built-in *Key Vault Crypto User* would also let it update or back up the key). No role can export it.
 - **Rotation without breaking tickets.** The key rotates every 90 days. The JWT header's `kid` names the version
   that signed it, and every enabled version is in the key set, so old tickets keep verifying. Disabling a version
   retires the tickets it signed (within the 10-minute key cache).
@@ -272,10 +274,14 @@ In Azure the key is an EC P-256 key in **Key Vault** (`TicketSigning:VaultUri`, 
   before parsing. A rotation puts the new version into the key set before it signs.
 - **Audit.** Every signature, read and denied request goes to Log Analytics (`AzureDiagnostics`).
 
+**A ticket is not proof of identity.** It proves this service confirmed that booking; it does not say who holds it.
+Anyone who knows a booking id can ask for its ticket, as anyone can cancel it: there is no authentication (see
+*Out of scope*). With sign-in, the ticket would be issued to the booker only and carry who they are.
+
 Locally and in tests, the same code signs with a key in memory (`LocalTicketKeys`), which a restart loses.
 
 ## Out of scope
 
-Auth, payments/deposits, holds with expiry for multi-step checkout, time zones per course (times are
+Auth (so tickets name their holder, and only the booker can cancel), payments/deposits, holds with expiry for multi-step checkout, time zones per course (times are
 course-local), expiry of old idempotency keys. With PostgreSQL and free-form time ranges instead of fixed
 slots, the equivalent guarantee is an exclusion constraint (`EXCLUDE USING gist (... WITH &&)`).
