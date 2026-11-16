@@ -4,6 +4,9 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- .NET 11 runtime async: the runtime suspends and resumes async methods instead of compiler-generated state
+         machines. Shorter live stack traces, fewer allocations per await. RuntimeAsyncTests fails if this goes. -->
+    <Features>runtime-async=on</Features>
     <UserSecretsId>teetime-booking-demo</UserSecretsId>
     <Version>1.0.0</Version>
     <!-- The SDK appends the commit to InformationalVersion: from .git locally, from SourceRevisionId in Docker. -->
