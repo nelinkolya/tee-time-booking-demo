@@ -43,17 +43,21 @@ public static class TicketEndpoints
                 "A JWT (ES256) stating the booking, its tee time and players. Check it with `POST /api/tickets/verify`, " +
                 "or offline against the keys at `/.well-known/jwks.json`.")
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
 
         api.MapPost("/tickets/verify", VerifyTicket)
             .WithSummary("Check a ticket's signature and its booking's current status")
             .WithDescription("**422** — not a ticket signed by this service: malformed, an unknown or retired key, or a bad signature.")
-            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
 
         app.MapGet("/.well-known/jwks.json", GetKeys)
             .RequireRateLimiting(RateLimits.Api)
             .WithTags("Tickets")
-            .WithSummary("The public keys tickets are signed with, one per key version");
+            .WithSummary("The public keys tickets are signed with, one per key version")
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
     }
 
     public static async Task<Results<Ok<TicketDto>, ProblemHttpResult>> IssueTicket(

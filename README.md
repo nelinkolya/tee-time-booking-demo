@@ -49,7 +49,7 @@ not `Guid.NewGuid()`: new rows append to the last page instead of splitting rand
 with SQL Server's own `ORDER BY Id` — .NET and SQL Server sort GUIDs differently, which is also why
 `Guid.CreateVersion7()` would not help here.
 
-## Tests — 55, against a real SQL Server
+## Tests — 61, against a real SQL Server
 
 Concurrency bugs don't show up against an in-memory provider, so the suite runs against SQL Server and fires
 requests through the real HTTP pipeline, all released at once from one gate.
@@ -71,6 +71,7 @@ requests through the real HTTP pipeline, all released at once from one gate.
 | ticket after cancelling | no new ticket (`409`); an earlier one still verifies, showing `Cancelled` |
 | key rotation | tickets signed before it still verify, until that key version is retired |
 | forged tickets on the open verify endpoint | unknown kids cost one vault read per 30 s, shared by parallel callers; a 4 MB token is refused by length |
+| a key version newer than the cache | its tickets verify at once |
 | API compiled with .NET 11 runtime async | no compiler state machine on `BookAsync`: the `runtime-async=on` switch is still there |
 | **load:** 1,000 requests at once on one 4-ball | exactly 4 × `201`, 996 × `409` (~0.5 s) |
 | **load:** 1,100 requests over 100 tee times, every 10th sent twice with the same key | no slot over capacity, counters match bookings, no key booked twice |
@@ -265,9 +266,10 @@ In Azure the key is an EC P-256 key in **Key Vault** (`TicketSigning:VaultUri`, 
 - **Rotation without breaking tickets.** The key rotates every 90 days. The JWT header's `kid` names the version
   that signed it, and every enabled version is in the key set, so old tickets keep verifying. Disabling a version
   retires the tickets it signed (within the 10-minute key cache).
-- **The open verify endpoint cannot be turned on the vault.** A token naming an unknown `kid` may trigger a fresh
-  read of the keys, but at most one per 30 seconds, shared by everyone waiting (`PublicKeyCache`); tokens over
-  2,048 characters are refused before parsing. A rotation puts the new version into the key set before it signs.
+- **The open endpoints cannot be turned on the vault.** Every vault read they cause goes through one cache
+  (`CachedRead`): a burst of ticket requests after the current key version expires is one read, and a token naming
+  an unknown `kid` may refresh the keys at most once per 30 seconds. Tokens over 2,048 characters are refused
+  before parsing. A rotation puts the new version into the key set before it signs.
 - **Audit.** Every signature, read and denied request goes to Log Analytics (`AzureDiagnostics`).
 
 Locally and in tests, the same code signs with a key in memory (`LocalTicketKeys`), which a restart loses.

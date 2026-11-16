@@ -21,7 +21,7 @@ public interface ITicketKeys
     /// <summary>
     /// The public key of every version still allowed to verify, by <c>kid</c>. They may be cached;
     /// <paramref name="refresh"/> asks for a fresh read, for a <c>kid</c> that appeared after the cache was filled
-    /// (rate-limited: see <see cref="PublicKeyCache"/>).
+    /// (rate-limited: see <see cref="CachedRead{T}"/>).
     /// </summary>
     Task<IReadOnlyDictionary<string, ECParameters>> GetPublicKeysAsync(bool refresh, CancellationToken ct);
 }
@@ -32,47 +32,27 @@ public interface ITicketKeys
 /// </summary>
 public sealed class KeyVaultTicketKeys : ITicketKeys
 {
-    // After a rotation, signing goes on with the previous version for up to this long; it still verifies.
-    private static readonly TimeSpan CurrentKidTtl = TimeSpan.FromMinutes(5);
-
     private readonly KeyClient _keys;
     private readonly TokenCredential _credential;
     private readonly string _keyName;
-    private readonly TimeProvider _clock;
-    private readonly PublicKeyCache _publicKeys;
     private readonly ConcurrentDictionary<string, CryptographyClient> _signers = new();
-    private (string Kid, DateTimeOffset At)? _current;
+
+    // After a rotation, signing goes on with the previous version for up to 5 minutes; it still verifies.
+    private readonly CachedRead<string> _currentKid;
+    // The public keys change only on rotation; a ticket naming an unknown kid may refresh them, once per 30 s.
+    private readonly CachedRead<IReadOnlyDictionary<string, ECParameters>> _publicKeys;
 
     public KeyVaultTicketKeys(KeyClient keys, TokenCredential credential, string keyName, TimeProvider clock)
     {
         _keys = keys;
         _credential = credential;
         _keyName = keyName;
-        _clock = clock;
-        _publicKeys = new PublicKeyCache(LoadPublicKeysAsync, clock);
+        _currentKid = new CachedRead<string>(ReadCurrentKidAsync, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5), clock);
+        _publicKeys = new CachedRead<IReadOnlyDictionary<string, ECParameters>>(
+            ReadPublicKeysAsync, TimeSpan.FromMinutes(10), TimeSpan.FromSeconds(30), clock);
     }
 
-    public async Task<string> GetCurrentKidAsync(CancellationToken ct)
-    {
-        if (_current is { } cached && _clock.GetUtcNow() - cached.At < CurrentKidTtl)
-        {
-            return cached.Kid;
-        }
-        // Reads the key's public part and properties only; the private key cannot be read at all.
-        KeyVaultKey key = await _keys.GetKeyAsync(_keyName, cancellationToken: ct);
-        var kid = key.Properties.Version;
-
-        // A new version (a rotation) goes into the published keys before it signs anything, so a ticket never
-        // names a kid that /.well-known/jwks.json does not list yet.
-        if (!(await _publicKeys.GetAsync(refresh: false, ct)).ContainsKey(kid))
-        {
-            _publicKeys.Invalidate();
-            await _publicKeys.GetAsync(refresh: false, ct);
-        }
-
-        _current = (kid, _clock.GetUtcNow());
-        return kid;
-    }
+    public Task<string> GetCurrentKidAsync(CancellationToken ct) => _currentKid.GetAsync(refresh: false, ct);
 
     public async Task<byte[]> SignAsync(string kid, byte[] data, CancellationToken ct)
     {
@@ -85,7 +65,23 @@ public sealed class KeyVaultTicketKeys : ITicketKeys
     public Task<IReadOnlyDictionary<string, ECParameters>> GetPublicKeysAsync(bool refresh, CancellationToken ct) =>
         _publicKeys.GetAsync(refresh, ct);
 
-    private async Task<IReadOnlyDictionary<string, ECParameters>> LoadPublicKeysAsync(CancellationToken ct)
+    private async Task<string> ReadCurrentKidAsync(CancellationToken ct)
+    {
+        // Reads the key's public part and properties only; the private key cannot be read at all.
+        KeyVaultKey key = await _keys.GetKeyAsync(_keyName, cancellationToken: ct);
+        var kid = key.Properties.Version;
+
+        // A new version (a rotation) goes into the published keys before it signs anything, so a ticket never
+        // names a kid that /.well-known/jwks.json does not list yet.
+        if (!(await _publicKeys.GetAsync(refresh: false, ct)).ContainsKey(kid))
+        {
+            _publicKeys.Invalidate();
+            await _publicKeys.GetAsync(refresh: false, ct);
+        }
+        return kid;
+    }
+
+    private async Task<IReadOnlyDictionary<string, ECParameters>> ReadPublicKeysAsync(CancellationToken ct)
     {
         var found = new Dictionary<string, ECParameters>();
         await foreach (var version in _keys.GetPropertiesOfKeyVersionsAsync(_keyName, ct))
