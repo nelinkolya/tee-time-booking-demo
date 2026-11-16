@@ -193,6 +193,11 @@ The load tests run only on demand: Actions → CI → **Run workflow** with **Ru
 The SQL Server `sa` password is generated per run, masked in the log, and never stored in the repository
 (`.github/scripts/start-sqlserver.sh`).
 
+**AI review** (`.github/workflows/ai-review.yml`): Claude reads every pull request against this project's
+guarantees — the race on capacity, idempotency, the API contract — and leaves inline comments on real problems
+only. It is advisory, not a required check: a model's verdict varies between runs, so the tests and CodeQL stay
+the gate for `main`. It never pushes, skips drafts and forks, and the action is pinned to a commit.
+
 ## Observability
 
 One **OpenTelemetry** pipeline for traces, metrics and logs (`Program.cs`, `Observability/BookingTelemetry.cs`).
