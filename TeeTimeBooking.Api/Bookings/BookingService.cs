@@ -89,11 +89,15 @@ public partial class BookingService(
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        var claimed = await db.TeeTimes
-            .Where(t => t.Id == teeTimeId && t.BookedPlayers + request.Players <= t.Capacity)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.BookedPlayers, t => t.BookedPlayers + request.Players), ct);
+        var teeTime = await db.TeeTimes.SingleOrDefaultAsync(t => t.Id == teeTimeId, ct);
+        if (teeTime is null)
+        {
+            await tx.RollbackAsync(ct);
+            return new BookingResult(BookingOutcome.TeeTimeNotFound);
+        }
 
-        if (claimed == 0)
+        var available = teeTime.Capacity - teeTime.BookedPlayers;
+        if (request.Players > available)
         {
             await tx.RollbackAsync(ct);
             // A copy with the same key may have taken the last spots while this one waited: a replay, not "full".
@@ -101,12 +105,10 @@ public partial class BookingService(
             {
                 return Replay(twin, teeTimeId, request);
             }
-
-            var teeTime = await db.TeeTimes.AsNoTracking().SingleOrDefaultAsync(t => t.Id == teeTimeId, ct);
-            return teeTime is null
-                ? new BookingResult(BookingOutcome.TeeTimeNotFound)
-                : new BookingResult(BookingOutcome.Full, AvailableSpots: teeTime.Capacity - teeTime.BookedPlayers);
+            return new BookingResult(BookingOutcome.Full, AvailableSpots: available);
         }
+
+        teeTime.BookedPlayers += request.Players;
 
         var booking = new Booking
         {
