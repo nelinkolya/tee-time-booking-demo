@@ -1,0 +1,10 @@
+.panel { margin-top: 8px; }
+.token { width: 100%; font-family: ui-monospace, monospace; font-size: 0.78rem; word-break: break-all; resize: vertical; }
+.claims { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0; font-size: 0.9rem; }
+.claims dt { color: var(--muted); }
+.claims dd { margin: 0; font-family: ui-monospace, monospace; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.valid, .warning, .invalid { margin: 10px 0 0; padding: 8px 10px; border-radius: 6px; border-left: 3px solid; }
+.valid { border-color: var(--ok); background: var(--accent-soft); }
+.warning { border-color: var(--replay); color: var(--replay); background: #fbf5e3; }
+.invalid { border-color: var(--conflict); color: var(--conflict); background: #f9ebe8; }

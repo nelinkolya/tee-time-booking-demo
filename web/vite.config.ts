@@ -10,6 +10,7 @@ export default defineConfig({
       "/api": "http://localhost:5110",
       "/swagger": "http://localhost:5110",
       "/openapi": "http://localhost:5110",
+      "/.well-known": "http://localhost:5110",
     },
   },
   test: {

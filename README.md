@@ -49,7 +49,7 @@ not `Guid.NewGuid()`: new rows append to the last page instead of splitting rand
 with SQL Server's own `ORDER BY Id` — .NET and SQL Server sort GUIDs differently, which is also why
 `Guid.CreateVersion7()` would not help here.
 
-## Tests — 63, against a real SQL Server
+## Tests — 65, against a real SQL Server
 
 Concurrency bugs don't show up against an in-memory provider, so the suite runs against SQL Server and fires
 requests through the real HTTP pipeline, all released at once from one gate.
@@ -72,7 +72,7 @@ requests through the real HTTP pipeline, all released at once from one gate.
 | key rotation | tickets signed before it still verify, until that key version is retired |
 | forged tickets on the open verify endpoint | unknown kids cost one vault read per 30 s, shared by parallel callers; a 4 MB token is refused by length |
 | a key version newer than the cache | its tickets verify at once |
-| Key Vault down | one attempt per 30 s, the last keys kept |
+| Key Vault down | one attempt per 30 s, the last keys kept, also through a rotation; with none cached, `503` + `Retry-After` |
 | API compiled with .NET 11 runtime async | no compiler state machine on `BookAsync`: the `runtime-async=on` switch is still there |
 | **load:** 1,000 requests at once on one 4-ball | exactly 4 × `201`, 996 × `409` (~0.5 s) |
 | **load:** 1,100 requests over 100 tee times, every 10th sent twice with the same key | no slot over capacity, counters match bookings, no key booked twice |
@@ -97,6 +97,9 @@ in step 3 fails the "last spots" test.
 | date changed while the previous day is still loading | the stale request is aborted and its late answer never replaces the newer one |
 | `inPool` | at most `limit` requests in flight, results in call order, a failure does not stop the rest |
 | `today()` | the local date, not UTC — the tests run in Kyiv time, since CI runners are UTC |
+| ticket for a booking | **Ticket** puts that booking's ticket in the ticket panel |
+| ticket panel | verifies the ticket shown; a cancelled booking reads as validly signed but cancelled |
+| "Change a byte" | sends the same header and signature with another player count, and explains the `BadSignature` |
 
 Each was checked by breaking the code it covers: every such change fails its test.
 
@@ -279,6 +282,10 @@ Anyone who knows a booking id can ask for its ticket, as anyone can cancel it: t
 *Out of scope*). With sign-in, the ticket would be issued to the booker only and carry who they are.
 
 Locally and in tests, the same code signs with a key in memory (`LocalTicketKeys`), which a restart loses.
+
+**In the UI**, each confirmed booking has a **Ticket** link. The ticket panel shows the token and what it states
+(booking, players, tee time, key version), verifies it, or verifies any ticket pasted in. **Change a byte** makes a
+forgery — another player count under the same signature — to show it rejected.
 
 ## Out of scope
 
