@@ -76,8 +76,7 @@ public sealed class KeyVaultTicketKeys : ITicketKeys
         // names a kid that /.well-known/jwks.json does not list yet.
         if (!(await _publicKeys.GetAsync(refresh: false, ct)).ContainsKey(kid))
         {
-            _publicKeys.Invalidate();
-            await _publicKeys.GetAsync(refresh: false, ct);
+            await _publicKeys.ReadNowAsync(ct); // a failure keeps the keys there were
         }
         return kid;
     }

@@ -45,26 +45,38 @@ public static class TicketEndpoints
                 "A ticket proves the booking was confirmed, not who holds it: there is no sign-in, so anyone with the booking id can get one.")
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
-            .ProducesProblem(StatusCodes.Status429TooManyRequests);
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
         api.MapPost("/tickets/verify", VerifyTicket)
             .WithSummary("Check a ticket's signature and its booking's current status")
             .WithDescription("**422** — not a ticket signed by this service: malformed, an unknown or retired key, or a bad signature.")
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
-            .ProducesProblem(StatusCodes.Status429TooManyRequests);
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
         app.MapGet("/.well-known/jwks.json", GetKeys)
             .RequireRateLimiting(RateLimits.Api)
             .WithTags("Tickets")
             .WithSummary("The public keys tickets are signed with, one per key version")
-            .ProducesProblem(StatusCodes.Status429TooManyRequests);
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
     }
 
     public static async Task<Results<Ok<TicketDto>, ProblemHttpResult>> IssueTicket(
-        Guid id, TicketService tickets, CancellationToken ct)
+        Guid id, TicketService tickets, HttpContext http, CancellationToken ct)
     {
-        var (outcome, token) = await tickets.IssueAsync(id, ct);
+        TicketIssue outcome;
+        string? token;
+        try
+        {
+            (outcome, token) = await tickets.IssueAsync(id, ct);
+        }
+        catch (KeyVaultUnavailableException)
+        {
+            return VaultUnavailable(http);
+        }
         return outcome switch
         {
             TicketIssue.Issued => TypedResults.Ok(new TicketDto(token!)),
@@ -75,9 +87,19 @@ public static class TicketEndpoints
     }
 
     public static async Task<Results<Ok<TicketCheckDto>, ProblemHttpResult>> VerifyTicket(
-        TicketToVerify request, TicketService tickets, BookingDb db, CancellationToken ct)
+        TicketToVerify request, TicketService tickets, BookingDb db, HttpContext http, CancellationToken ct)
     {
-        var (outcome, claims) = await tickets.VerifyAsync(request.Token ?? "", ct);
+        TicketCheck outcome;
+        TicketClaims? claims;
+        try
+        {
+            (outcome, claims) = await tickets.VerifyAsync(request.Token ?? "", ct);
+        }
+        catch (KeyVaultUnavailableException)
+        {
+            // Not "invalid": the ticket may be fine, the keys cannot be checked just now.
+            return VaultUnavailable(http);
+        }
         if (outcome != TicketCheck.Valid)
         {
             return TypedResults.Problem(
@@ -104,12 +126,30 @@ public static class TicketEndpoints
             DateTimeOffset.FromUnixTimeSeconds(claims.IssuedAt).UtcDateTime, status.Value));
     }
 
-    public static async Task<Ok<JsonWebKeySet>> GetKeys(ITicketKeys keys, CancellationToken ct)
+    public static async Task<Results<Ok<JsonWebKeySet>, ProblemHttpResult>> GetKeys(
+        ITicketKeys keys, HttpContext http, CancellationToken ct)
     {
-        var publicKeys = await keys.GetPublicKeysAsync(refresh: false, ct);
+        IReadOnlyDictionary<string, System.Security.Cryptography.ECParameters> publicKeys;
+        try
+        {
+            publicKeys = await keys.GetPublicKeysAsync(refresh: false, ct);
+        }
+        catch (KeyVaultUnavailableException)
+        {
+            return VaultUnavailable(http);
+        }
         return TypedResults.Ok(new JsonWebKeySet(publicKeys
             .Select(k => new JsonWebKey(
                 "EC", "P-256", Base64Url.EncodeToString(k.Value.Q.X), Base64Url.EncodeToString(k.Value.Q.Y), k.Key, "sig", "ES256"))
             .ToList()));
+    }
+
+    /// <summary>Key Vault is out of reach and nothing is cached: try again once the cache may read it again.</summary>
+    private static ProblemHttpResult VaultUnavailable(HttpContext http)
+    {
+        http.Response.Headers.RetryAfter = "30";
+        return TypedResults.Problem(
+            title: "Tickets cannot be signed or checked just now; try again shortly.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 }

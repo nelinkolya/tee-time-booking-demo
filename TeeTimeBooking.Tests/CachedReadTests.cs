@@ -81,7 +81,8 @@ public class CachedReadTests
         var cache = NewCache();
         _vaultDown = true;
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => cache.GetAsync(refresh: false, default));
+        var first = await Assert.ThrowsAsync<KeyVaultUnavailableException>(() => cache.GetAsync(refresh: false, default));
+        Assert.IsType<HttpRequestException>(first.InnerException);
         for (var i = 0; i < 50; i++)
         {
             await Assert.ThrowsAsync<KeyVaultUnavailableException>(() => cache.GetAsync(refresh: true, default));
@@ -101,7 +102,7 @@ public class CachedReadTests
     }
 
     [Fact]
-    public async Task The_value_is_read_again_after_the_ttl_or_when_invalidated()
+    public async Task The_value_is_read_again_after_the_ttl_or_when_read_now()
     {
         var cache = NewCache();
         await cache.GetAsync(refresh: false, default);
@@ -110,9 +111,22 @@ public class CachedReadTests
         await cache.GetAsync(refresh: false, default);
         _clock.Advance(TimeSpan.FromSeconds(1));
         await cache.GetAsync(refresh: false, default);
-        cache.Invalidate();
-        await cache.GetAsync(refresh: false, default);
+        await cache.ReadNowAsync(default); // within the refresh interval: forced anyway
 
         Assert.Equal(3, _reads);
+    }
+
+    [Fact]
+    public async Task Reading_now_while_the_vault_is_down_keeps_the_value_there_was()
+    {
+        var cache = NewCache();
+        await cache.GetAsync(refresh: false, default);
+        _vaultDown = true;
+
+        var afterFailedRead = await cache.ReadNowAsync(default);
+        var later = await cache.GetAsync(refresh: false, default);
+
+        Assert.Equal("read 1", afterFailedRead);
+        Assert.Equal("read 1", later);
     }
 }

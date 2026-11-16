@@ -22,9 +22,9 @@ public class OpenApiTests(ApiFixture api)
     }
 
     [Theory]
-    [InlineData("/api/bookings/{id}/ticket", "get", new[] { "200", "404", "409", "429" })]
-    [InlineData("/api/tickets/verify", "post", new[] { "200", "400", "422", "429" })]
-    [InlineData("/.well-known/jwks.json", "get", new[] { "200", "429" })]
+    [InlineData("/api/bookings/{id}/ticket", "get", new[] { "200", "404", "409", "429", "503" })]
+    [InlineData("/api/tickets/verify", "post", new[] { "200", "400", "422", "429", "503" })]
+    [InlineData("/.well-known/jwks.json", "get", new[] { "200", "429", "503" })]
     public async Task The_ticket_operations_document_every_response(string path, string method, string[] responses)
     {
         using var doc = JsonDocument.Parse(await api.CreateClient().GetStringAsync("/openapi/v1.json"));
