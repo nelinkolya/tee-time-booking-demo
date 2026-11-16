@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/nelinkolya/tee-time-booking-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/nelinkolya/tee-time-booking-demo/actions/workflows/ci.yml)
 
-A minimal golf tee-time booking API (ASP.NET Core 10, EF Core 10, SQL Server) with a React UI, built to show
+A minimal golf tee-time booking API (ASP.NET Core 11, EF Core 11, SQL Server) with a React UI, built to show
 one thing: **no matter how requests race or repeat, a tee time never holds more players than it has spots,
 and one booking attempt never becomes two bookings.**
 

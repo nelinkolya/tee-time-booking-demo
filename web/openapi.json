@@ -1,5 +1,5 @@
 {
-  "openapi": "3.1.1",
+  "openapi": "3.2.0",
   "info": {
     "title": "Tee Time Booking API",
     "description": "Books spots on golf tee times without overbooking under concurrent requests, and without duplicates when one request is retried: send a unique `Idempotency-Key` header per booking attempt and reuse it on retries.",
@@ -108,8 +108,8 @@
           "required": true
         },
         "responses": {
-          "201": {
-            "description": "Created",
+          "200": {
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -118,8 +118,8 @@
               }
             }
           },
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -138,6 +138,16 @@
               }
             }
           },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Conflict",
             "content": {
@@ -150,16 +160,6 @@
           },
           "422": {
             "description": "Unprocessable Entity",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -464,13 +464,13 @@
   },
   "tags": [
     {
-      "name": "Tee times"
-    },
-    {
       "name": "Bookings"
     },
     {
       "name": "Meta"
+    },
+    {
+      "name": "Tee times"
     }
   ]
 }

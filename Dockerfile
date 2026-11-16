@@ -7,7 +7,7 @@ RUN npm ci --no-audit --no-fund
 COPY web/ ./
 RUN npm run build
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS api
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS api
 WORKDIR /src
 COPY TeeTimeBooking.Api/TeeTimeBooking.Api.csproj TeeTimeBooking.Api/
 RUN dotnet restore TeeTimeBooking.Api/TeeTimeBooking.Api.csproj
@@ -18,7 +18,7 @@ ARG BUILD_TIMESTAMP=""
 RUN dotnet publish TeeTimeBooking.Api/TeeTimeBooking.Api.csproj -c Release -o /app --no-restore -p:UseAppHost=false \
     -p:SourceRevisionId="$GIT_SHA" -p:BuildTimestamp="$BUILD_TIMESTAMP"
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 WORKDIR /app
 COPY --from=api /app ./
 COPY --from=web /web/dist ./wwwroot
