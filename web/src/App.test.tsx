@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { book, cancel, getBookings, getTeeTimes, getVersion, type Booking, type TeeTime } from "./api";
+import { book, cancel, getBookings, getTeeTimes, getTicket, getVersion, type Booking, type TeeTime } from "./api";
 import { App } from "./App";
 
 vi.mock("./api");
@@ -25,6 +25,21 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
     expect(await screen.findByText("Error: Cancel failed: 500")).toBeInTheDocument();
+  });
+
+  it("puts a booking's ticket in the ticket panel", async () => {
+    const booking: Booking = { id: "b1", teeTimeId: 1, playerName: "Alex", players: 2, status: "Confirmed", createdAtUtc: "2026-11-03T06:00:00Z" };
+    vi.mocked(getTeeTimes).mockResolvedValue([slot(1, "2026-11-03T07:10:00")]);
+    vi.mocked(getBookings).mockResolvedValue([booking]);
+    vi.mocked(getTicket).mockResolvedValue({ ok: true, token: "aaa.bbb.ccc" });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /07:10/ }));
+    await user.click(await screen.findByRole("button", { name: "Ticket" }));
+
+    expect(getTicket).toHaveBeenCalledWith("b1");
+    expect(await screen.findByRole("textbox", { name: "Ticket" })).toHaveValue("aaa.bbb.ccc");
   });
 
   it("books a different tee time with a new idempotency key", async () => {

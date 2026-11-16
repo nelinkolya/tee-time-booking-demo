@@ -62,6 +62,45 @@ export async function resetDemo(): Promise<void> {
   await fetch("/api/demo/reset", { method: "POST" });
 }
 
+export interface Ticket {
+  token: string;
+}
+
+/** A ticket's statement, checked by the server, with the booking's status now. */
+export interface TicketCheck {
+  bookingId: string;
+  teeTimeId: number;
+  players: number;
+  startsAt: string;
+  issuedAtUtc: string;
+  status: "Confirmed" | "Cancelled";
+}
+
+export type TicketResult = { ok: true; token: string } | { ok: false; status: number; title: string };
+
+/** reason: Malformed, UnknownKey, BadSignature or BookingNotFound. */
+export type VerifyResult = { ok: true; check: TicketCheck } | { ok: false; status: number; title: string; reason?: string };
+
+export async function getTicket(bookingId: string): Promise<TicketResult> {
+  const res = await fetch(`/api/bookings/${bookingId}/ticket`);
+  const body = await res.json().catch(() => undefined);
+  return res.ok
+    ? { ok: true, token: (body as Ticket).token }
+    : { ok: false, status: res.status, title: body?.title ?? `Getting the ticket failed: ${res.status}` };
+}
+
+export async function verifyTicket(token: string): Promise<VerifyResult> {
+  const res = await fetch("/api/tickets/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  const body = await res.json().catch(() => undefined);
+  return res.ok
+    ? { ok: true, check: body as TicketCheck }
+    : { ok: false, status: res.status, title: body?.title ?? `Verifying failed: ${res.status}`, reason: body?.reason };
+}
+
 export interface AppVersion {
   version: string;
   commit: string | null;

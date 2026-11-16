@@ -49,7 +49,7 @@ not `Guid.NewGuid()`: new rows append to the last page instead of splitting rand
 with SQL Server's own `ORDER BY Id` — .NET and SQL Server sort GUIDs differently, which is also why
 `Guid.CreateVersion7()` would not help here.
 
-## Tests — 45, against a real SQL Server
+## Tests — 67, against a real SQL Server
 
 Concurrency bugs don't show up against an in-memory provider, so the suite runs against SQL Server and fires
 requests through the real HTTP pipeline, all released at once from one gate.
@@ -67,6 +67,13 @@ requests through the real HTTP pipeline, all released at once from one gate.
 | booking status on the wire | a name (`"Cancelled"`), as the UI compares it |
 | **naive check-then-insert** | **overbooks a 4-ball to 6 players** — why the service doesn't do that |
 | DB check constraint | rejects a counter above capacity |
+| ticket for a booking | verifies, states the booking; checks offline with only the JWKS; one changed byte → `422` |
+| ticket after cancelling | no new ticket (`409`); an earlier one still verifies, showing `Cancelled` |
+| key rotation | tickets signed before it still verify, until that key version is retired |
+| forged tickets on the open verify endpoint | unknown kids cost one vault read per 30 s, shared by parallel callers; a 4 MB token is refused by length |
+| a key version newer than the cache | its tickets verify at once |
+| the same ticket asked for again | no new signature (each one is billed in Key Vault) until the key rotates; tickets have their own rate limit |
+| Key Vault down | one attempt per 30 s, the last keys kept, also through a rotation; with none cached, `503` + `Retry-After` |
 | API compiled with .NET 11 runtime async | no compiler state machine on `BookAsync`: the `runtime-async=on` switch is still there |
 | **load:** 1,000 requests at once on one 4-ball | exactly 4 × `201`, 996 × `409` (~0.5 s) |
 | **load:** 1,100 requests over 100 tee times, every 10th sent twice with the same key | no slot over capacity, counters match bookings, no key booked twice |
@@ -91,6 +98,11 @@ in step 3 fails the "last spots" test.
 | date changed while the previous day is still loading | the stale request is aborted and its late answer never replaces the newer one |
 | `inPool` | at most `limit` requests in flight, results in call order, a failure does not stop the rest |
 | `today()` | the local date, not UTC — the tests run in Kyiv time, since CI runners are UTC |
+| ticket for a booking | **Ticket** puts that booking's ticket in the ticket panel |
+| ticket panel | verifies the ticket shown; a cancelled booking reads as validly signed but cancelled |
+| "Change a byte" | sends the same header and signature with another player count, and explains the `BadSignature` |
+| text changed while a check is on its way | the late answer is dropped, not shown next to the new text |
+| a copy the browser refuses | logged, not lost as an unhandled rejection |
 
 Each was checked by breaking the code it covers: every such change fails its test.
 
@@ -161,9 +173,10 @@ to zero and the database auto-pauses, so the first request after a quiet spell c
 | App | Container Apps (Consumption), 0.25 vCPU, 0–1 replicas, image from `ghcr.io/nelinkolya/tee-time-booking-demo` |
 | Database | Azure SQL Database free offer (serverless, auto-pause when the monthly free amount runs out) |
 | Database login | the app's **managed identity** — no password anywhere; the SQL server accepts Entra authentication only |
+| Ticket signing | an EC key in **Key Vault** (RBAC); the app may sign with it, nobody can read its private part |
 | Telemetry | Application Insights via the OpenTelemetry Azure Monitor exporter (`APPLICATIONINSIGHTS_CONNECTION_STRING`) |
 | Migrations | a Container Apps **job** (`--migrate`) with its own identity — the only one allowed to change the schema; the app runs with `Database__MigrateOnStartup=false` |
-| Cost guard | a $5-a-year budget with email alerts, and an **Azure Monitor alert** when the app has not scaled to zero for six hours — a replica kept warm would use the month's free vCPU in about eight days |
+| Cost guard | a $5-a-year budget with email alerts, and an **Azure Monitor alert** when the app has not scaled to zero for six hours — a replica kept warm would use the month's free vCPU in about eight days; another when Key Vault answers over 2,000 requests in an hour (see *Booking tickets*) |
 | Infrastructure | all of it in **Bicep** (`infra/main.bicep`, see `infra/README.md`) |
 
 Every `main` that passes CI is deployed automatically: the image is published, the migration job runs with it
@@ -228,7 +241,7 @@ dotnet tool run dotnet-counters monitor -n TeeTimeBooking.Api --counters TeeTime
 ## API
 
 Interactive docs outside production: **Swagger UI at `/swagger`** (also linked from the UI header as
-"API docs"), rendering the built-in OpenAPI 3.1 document at `/openapi/v1.json`. The document lists every
+"API docs"), rendering the built-in OpenAPI 3.2 document at `/openapi/v1.json`. The document lists every
 response of each operation, the `Idempotency-Key` header, and problem+json error bodies; a test pins that.
 
 | Method | Route | Notes |
@@ -237,14 +250,55 @@ response of each operation, the `Idempotency-Key` header, and problem+json error
 | `GET` | `/api/tee-times/{id}/bookings` | |
 | `POST` | `/api/tee-times/{id}/bookings` | header `Idempotency-Key`; body `{ playerName, players }` → `201` / `200` replay / `409` full / `422` key reused / `400` / `404` |
 | `POST` | `/api/bookings/{id}/cancel` | idempotent |
+| `GET` | `/api/bookings/{id}/ticket` | a signed ticket (JWT, ES256) → `200` / `409` cancelled / `404` |
+| `POST` | `/api/tickets/verify` | body `{ token }` → `200` with the booking's current status / `422` with `reason` |
+| `GET` | `/.well-known/jwks.json` | the public keys, one per key version |
 | `GET` | `/api/version` | release, commit and build time |
 | `POST` | `/api/demo/reset` | Development only |
 
 **Rate limits** (per client IP, `429` with `Retry-After`): bookings and cancels 1,100 per 10 minutes — one
-1,000-player rush from the UI, not a flood — and other API calls 600 a minute.
+1,000-player rush from the UI, not a flood — tickets 20 a minute (a new one is a billed Key Vault signature),
+and other API calls 600 a minute.
+
+## Booking tickets — signed with a key in Key Vault
+
+Every confirmed booking can get a **ticket**: a JWT signed with ES256 that states the booking, its tee time and
+players. Anyone can check one offline against the public keys at `/.well-known/jwks.json`; the API's
+`POST /api/tickets/verify` also returns the booking's current status, because a signature proves what was
+booked, not that it still stands.
+
+In Azure the key is an EC P-256 key in **Key Vault** (`TicketSigning:VaultUri`, `infra/main.bicep`):
+
+- **The private key never leaves the vault.** The app sends a SHA-256 digest and gets a signature back; its
+  managed identity holds a custom *Ticket Signer* role on this one key: read it and sign with it, nothing else
+  (the built-in *Key Vault Crypto User* would also let it update or back up the key). No role can export it.
+- **Rotation without breaking tickets.** The key rotates once a year. The JWT header's `kid` names the version
+  that signed it, and every enabled version is in the key set, so old tickets keep verifying. Disabling a version
+  retires the tickets it signed (within the 10-minute key cache).
+- **The open endpoints cannot be turned on the vault.** Every vault read they cause goes through one cache
+  (`CachedRead`): a burst of ticket requests after the current key version expires is one read, and a token naming
+  an unknown `kid` may refresh the keys at most once per 30 seconds. Tokens over 2,048 characters are refused
+  before parsing. A rotation puts the new version into the key set before it signs.
+- **Audit.** Every signature, read and denied request goes to Log Analytics (`AzureDiagnostics`).
+- **Cost.** Key Vault bills per operation: $0.15 per 10,000 signatures with an EC key, $0.03 per 10,000 other
+  operations, $1 per automated rotation (Azure retail prices, Sweden Central). So the app signs **once per booking
+  and key version** and serves the same ticket again from memory; new tickets have their own limit, 20 a minute per
+  client; the key rotates once a year, not quarterly, which would take $4 of the $5-a-year budget; and an alert
+  emails when the vault answers over 2,000 requests in an hour, within the quarter-hour rather than a day later
+  when the budget's cost data arrives. Azure has no hard spending cap on this subscription: the bound is built in.
+
+**A ticket is not proof of identity.** It proves this service confirmed that booking; it does not say who holds it.
+Anyone who knows a booking id can ask for its ticket, as anyone can cancel it: there is no authentication (see
+*Out of scope*). With sign-in, the ticket would be issued to the booker only and carry who they are.
+
+Locally and in tests, the same code signs with a key in memory (`LocalTicketKeys`), which a restart loses.
+
+**In the UI**, each confirmed booking has a **Ticket** link. The ticket panel shows the token and what it states
+(booking, players, tee time, key version), verifies it, or verifies any ticket pasted in. **Change a byte** makes a
+forgery — another player count under the same signature — to show it rejected.
 
 ## Out of scope
 
-Auth, payments/deposits, holds with expiry for multi-step checkout, time zones per course (times are
+Auth (so tickets name their holder, and only the booker can cancel), payments/deposits, holds with expiry for multi-step checkout, time zones per course (times are
 course-local), expiry of old idempotency keys. With PostgreSQL and free-form time ranges instead of fixed
 slots, the equivalent guarantee is an exclusion constraint (`EXCLUDE USING gist (... WITH &&)`).

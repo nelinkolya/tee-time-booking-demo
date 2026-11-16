@@ -84,6 +84,53 @@ resource db 'Microsoft.Sql/servers/databases@2023-08-01' = {
   }
 }
 
+// Booking tickets are signed with a key that never leaves this vault. RBAC, not access policies: who may do what is
+// a role assignment like any other. Purge protection: a deleted key stays recoverable for the retention period.
+resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: 'kv-teetime-${uniqueString(resourceGroup().id)}' // vault names are global, 24 characters at most
+  location: location
+  properties: {
+    tenantId: subscription().tenantId
+    sku: { family: 'A', name: 'standard' }
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 7
+    enablePurgeProtection: true
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// EC P-256 for ES256. Rotated once a year: each automated rotation is billed ($1), and the whole subscription's
+// budget is $5 a year. Rotating by hand (`az keyvault key rotate`) is not billed beyond its operations. Old versions
+// stay enabled, so tickets they signed still verify. Created once: deploying again neither replaces the key nor
+// adds a version.
+resource ticketKey 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
+  parent: vault
+  name: 'ticket-signing'
+  properties: {
+    kty: 'EC'
+    curveName: 'P-256'
+    keyOps: [ 'sign', 'verify' ]
+    rotationPolicy: {
+      attributes: { expiryTime: 'P2Y' } // a version left unrotated stops signing after two years
+      lifetimeActions: [
+        { trigger: { timeAfterCreate: 'P1Y' }, action: { type: 'rotate' } }
+        { trigger: { timeBeforeExpiry: 'P30D' }, action: { type: 'notify' } }
+      ]
+    }
+  }
+}
+
+// Every read, signature and denied request, in the same workspace as the app's logs (table AzureDiagnostics).
+resource vaultAudit 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'audit-to-log-analytics'
+  scope: vault
+  properties: {
+    workspaceId: logs.id
+    logs: [ { categoryGroup: 'audit', enabled: true } ]
+  }
+}
+
 // The migration job's identity: the only one that may change the schema.
 resource migrator 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-teetime-migrator'
@@ -140,6 +187,8 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
             { name: 'OTEL_SERVICE_NAME', value: 'TeeTimeBooking.Api' }
             { name: 'Database__MigrateOnStartup', value: 'false' } // the migration job does it
             { name: 'ASPNETCORE_FORWARDEDHEADERS_ENABLED', value: 'true' } // client IP for rate limits
+            { name: 'TicketSigning__VaultUri', value: vault.properties.vaultUri }
+            { name: 'TicketSigning__KeyName', value: ticketKey.name }
           ]
           probes: [
             // The process only: a database outage must not restart containers.
@@ -153,6 +202,40 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
       ]
       scale: { minReplicas: 0, maxReplicas: 1, cooldownPeriod: 300, pollingInterval: 30 } // scale to zero; one replica caps the cost
     }
+  }
+}
+
+// The app may read the ticket key's public parts and sign with it, on this key only. Nothing else: the built-in
+// "Key Vault Crypto User" would also let it update, back up, encrypt or decrypt with the key, and so disable its
+// versions. Nobody can read the private key; the migration job gets nothing here.
+resource ticketSigner 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
+  name: guid(resourceGroup().id, 'ticket-signer')
+  properties: {
+    roleName: 'Ticket Signer (${resourceGroup().name})' // role names are unique per tenant
+    description: 'Read a Key Vault key and its public part, and sign with it. No other key operation.'
+    type: 'CustomRole'
+    permissions: [
+      {
+        actions: []
+        notActions: []
+        dataActions: [
+          'Microsoft.KeyVault/vaults/keys/read'
+          'Microsoft.KeyVault/vaults/keys/sign/action'
+        ]
+        notDataActions: []
+      }
+    ]
+    assignableScopes: [ resourceGroup().id ]
+  }
+}
+
+resource appSignsTickets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(ticketKey.id, app.id, ticketSigner.id)
+  scope: ticketKey
+  properties: {
+    roleDefinitionId: ticketSigner.id
+    principalId: app.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -232,5 +315,38 @@ resource alwaysOn 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   }
 }
 
+// Key Vault bills per operation, and a signature with the EC ticket key costs $0.15 per 10,000. The app signs once per
+// booking and key version and reads its keys a few times an hour, so normal use is tens of operations an hour; two
+// thousand means something is calling it in a loop. Fires within the quarter-hour, long before the budget would.
+resource vaultBusy 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-teetime-vault-busy'
+  location: 'global'
+  properties: {
+    description: 'Key Vault answered over 2,000 requests in an hour: ticket signatures are billed, and normal use is tens an hour.'
+    severity: 2
+    enabled: true
+    scopes: [ vault.id ]
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT1H'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'vault-requests'
+          metricNamespace: 'Microsoft.KeyVault/vaults'
+          metricName: 'ServiceApiHit'
+          timeAggregation: 'Total'
+          operator: 'GreaterThan'
+          threshold: 2000
+        }
+      ]
+    }
+    autoMitigate: true
+    actions: [ { actionGroupId: owner.id } ]
+  }
+}
+
 output appUrl string = 'https://${app.properties.configuration.ingress.fqdn}'
 output migratorPrincipalName string = migrator.name
+output ticketVaultName string = vault.name

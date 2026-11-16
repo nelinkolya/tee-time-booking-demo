@@ -15,6 +15,12 @@ public class RateLimitOptions
 
     /// <summary>Other API requests per client per minute.</summary>
     public int ApiPermitsPerMinute { get; set; } = 600;
+
+    /// <summary>
+    /// Ticket requests per client per minute. A new ticket is a signature in Key Vault, which is billed; the same
+    /// booking's ticket again is served from memory, but a client walking through booking ids would not be.
+    /// </summary>
+    public int TicketPermitsPerMinute { get; set; } = 20;
 }
 
 /// <summary>
@@ -25,6 +31,7 @@ public static class RateLimits
 {
     public const string Bookings = "bookings";
     public const string Api = "api";
+    public const string Tickets = "tickets";
 
     public static IServiceCollection AddClientRateLimits(this IServiceCollection services, IConfiguration config)
     {
@@ -34,6 +41,7 @@ public static class RateLimits
         {
             limiter.AddPolicy(Bookings, http => Window(http, options.Enabled, options.BookingPermits, TimeSpan.FromMinutes(options.BookingWindowMinutes)));
             limiter.AddPolicy(Api, http => Window(http, options.Enabled, options.ApiPermitsPerMinute, TimeSpan.FromMinutes(1)));
+            limiter.AddPolicy(Tickets, http => Window(http, options.Enabled, options.TicketPermitsPerMinute, TimeSpan.FromMinutes(1)));
 
             limiter.OnRejected = async (context, ct) =>
             {

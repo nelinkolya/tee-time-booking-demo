@@ -1,7 +1,15 @@
 import type { Booking } from "../../api";
 import styles from "./BookingList.module.css";
 
-export function BookingList({ bookings, onCancel }: { bookings: Booking[]; onCancel: (id: string) => void }) {
+export function BookingList({
+  bookings,
+  onCancel,
+  onTicket,
+}: {
+  bookings: Booking[];
+  onCancel: (id: string) => void;
+  onTicket: (id: string) => void;
+}) {
   return (
     <>
       <h3>Bookings</h3>
@@ -13,9 +21,14 @@ export function BookingList({ bookings, onCancel }: { bookings: Booking[]; onCan
               {b.playerName} · {b.players} {b.players === 1 ? "player" : "players"}
             </span>
             {b.status === "Confirmed" ? (
-              <button className="link" onClick={() => onCancel(b.id)}>
-                Cancel
-              </button>
+              <span className={styles.actions}>
+                <button className={`link ${styles.ticket}`} onClick={() => onTicket(b.id)}>
+                  Ticket
+                </button>
+                <button className="link" onClick={() => onCancel(b.id)}>
+                  Cancel
+                </button>
+              </span>
             ) : (
               <span className="muted">cancelled</span>
             )}

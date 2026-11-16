@@ -21,6 +21,19 @@ public class OpenApiTests(ApiFixture api)
         Assert.True(post.GetProperty("responses").GetProperty("409").GetProperty("content").TryGetProperty("application/problem+json", out _));
     }
 
+    [Theory]
+    [InlineData("/api/bookings/{id}/ticket", "get", new[] { "200", "404", "409", "429", "503" })]
+    [InlineData("/api/tickets/verify", "post", new[] { "200", "400", "422", "429", "503" })]
+    [InlineData("/.well-known/jwks.json", "get", new[] { "200", "429", "503" })]
+    public async Task The_ticket_operations_document_every_response(string path, string method, string[] responses)
+    {
+        using var doc = JsonDocument.Parse(await api.CreateClient().GetStringAsync("/openapi/v1.json"));
+
+        var operation = doc.RootElement.GetProperty("paths").GetProperty(path).GetProperty(method);
+
+        Assert.Equal(responses, operation.GetProperty("responses").EnumerateObject().Select(r => r.Name).Order());
+    }
+
     [Fact]
     public async Task Swagger_UI_is_served()
     {
