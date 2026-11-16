@@ -30,6 +30,9 @@ public sealed class TicketService(BookingDb db, ITicketKeys keys, TimeProvider c
 {
     private const string Algorithm = "ES256";
 
+    /// <summary>A real ticket is about 400 characters.</summary>
+    public const int MaxTokenLength = 2048;
+
     private record Header(
         [property: JsonPropertyName("alg")] string Alg,
         [property: JsonPropertyName("typ")] string Typ,
@@ -60,7 +63,12 @@ public sealed class TicketService(BookingDb db, ITicketKeys keys, TimeProvider c
 
     public async Task<(TicketCheck Outcome, TicketClaims? Claims)> VerifyAsync(string token, CancellationToken ct)
     {
-        var parts = token.Split('.');
+        // Checked before any parsing: the endpoint is open, and a request body may be megabytes of dots.
+        if (token.Length > MaxTokenLength)
+        {
+            return (TicketCheck.Malformed, null);
+        }
+        var parts = token.Split('.', 4);
         if (parts.Length != 3
             || Decode<Header>(parts[0]) is not { Alg: Algorithm, Kid: { Length: > 0 } kid }
             || !Base64Url.IsValid(parts[2]))

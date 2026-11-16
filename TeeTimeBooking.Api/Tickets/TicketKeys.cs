@@ -20,7 +20,8 @@ public interface ITicketKeys
 
     /// <summary>
     /// The public key of every version still allowed to verify, by <c>kid</c>. They may be cached;
-    /// <paramref name="refresh"/> reads them again, for a <c>kid</c> that appeared after the cache was filled.
+    /// <paramref name="refresh"/> asks for a fresh read, for a <c>kid</c> that appeared after the cache was filled
+    /// (rate-limited: see <see cref="PublicKeyCache"/>).
     /// </summary>
     Task<IReadOnlyDictionary<string, ECParameters>> GetPublicKeysAsync(bool refresh, CancellationToken ct);
 }
@@ -29,67 +30,75 @@ public interface ITicketKeys
 /// Azure Key Vault: the private key never leaves the vault; the app may only sign with it and read the public parts
 /// (role "Key Vault Crypto User" on this key). Disabling a version in the vault retires the tickets it signed.
 /// </summary>
-public sealed class KeyVaultTicketKeys(KeyClient keys, TokenCredential credential, string keyName, TimeProvider clock)
-    : ITicketKeys
+public sealed class KeyVaultTicketKeys : ITicketKeys
 {
     // After a rotation, signing goes on with the previous version for up to this long; it still verifies.
     private static readonly TimeSpan CurrentKidTtl = TimeSpan.FromMinutes(5);
-    // The public keys change only on rotation, and an unknown kid refreshes them at once.
-    private static readonly TimeSpan PublicKeysTtl = TimeSpan.FromMinutes(10);
 
-    private readonly SemaphoreSlim _refresh = new(1, 1);
+    private readonly KeyClient _keys;
+    private readonly TokenCredential _credential;
+    private readonly string _keyName;
+    private readonly TimeProvider _clock;
+    private readonly PublicKeyCache _publicKeys;
     private readonly ConcurrentDictionary<string, CryptographyClient> _signers = new();
     private (string Kid, DateTimeOffset At)? _current;
-    private (IReadOnlyDictionary<string, ECParameters> Keys, DateTimeOffset At)? _publicKeys;
+
+    public KeyVaultTicketKeys(KeyClient keys, TokenCredential credential, string keyName, TimeProvider clock)
+    {
+        _keys = keys;
+        _credential = credential;
+        _keyName = keyName;
+        _clock = clock;
+        _publicKeys = new PublicKeyCache(LoadPublicKeysAsync, clock);
+    }
 
     public async Task<string> GetCurrentKidAsync(CancellationToken ct)
     {
-        if (_current is { } cached && clock.GetUtcNow() - cached.At < CurrentKidTtl)
+        if (_current is { } cached && _clock.GetUtcNow() - cached.At < CurrentKidTtl)
         {
             return cached.Kid;
         }
         // Reads the key's public part and properties only; the private key cannot be read at all.
-        KeyVaultKey key = await keys.GetKeyAsync(keyName, cancellationToken: ct);
-        _current = (key.Properties.Version, clock.GetUtcNow());
-        return key.Properties.Version;
+        KeyVaultKey key = await _keys.GetKeyAsync(_keyName, cancellationToken: ct);
+        var kid = key.Properties.Version;
+
+        // A new version (a rotation) goes into the published keys before it signs anything, so a ticket never
+        // names a kid that /.well-known/jwks.json does not list yet.
+        if (!(await _publicKeys.GetAsync(refresh: false, ct)).ContainsKey(kid))
+        {
+            _publicKeys.Invalidate();
+            await _publicKeys.GetAsync(refresh: false, ct);
+        }
+
+        _current = (kid, _clock.GetUtcNow());
+        return kid;
     }
 
     public async Task<byte[]> SignAsync(string kid, byte[] data, CancellationToken ct)
     {
         // SignDataAsync hashes locally (SHA-256): only the digest goes to the vault.
-        var signer = _signers.GetOrAdd(kid, v => new CryptographyClient(new Uri(keys.VaultUri, $"keys/{keyName}/{v}"), credential));
+        var signer = _signers.GetOrAdd(kid, v => new CryptographyClient(new Uri(_keys.VaultUri, $"keys/{_keyName}/{v}"), _credential));
         var result = await signer.SignDataAsync(SignatureAlgorithm.ES256, data, ct);
         return result.Signature;
     }
 
-    public async Task<IReadOnlyDictionary<string, ECParameters>> GetPublicKeysAsync(bool refresh, CancellationToken ct)
-    {
-        if (!refresh && _publicKeys is { } cached && clock.GetUtcNow() - cached.At < PublicKeysTtl)
-        {
-            return cached.Keys;
-        }
+    public Task<IReadOnlyDictionary<string, ECParameters>> GetPublicKeysAsync(bool refresh, CancellationToken ct) =>
+        _publicKeys.GetAsync(refresh, ct);
 
-        await _refresh.WaitAsync(ct);
-        try
+    private async Task<IReadOnlyDictionary<string, ECParameters>> LoadPublicKeysAsync(CancellationToken ct)
+    {
+        var found = new Dictionary<string, ECParameters>();
+        await foreach (var version in _keys.GetPropertiesOfKeyVersionsAsync(_keyName, ct))
         {
-            var found = new Dictionary<string, ECParameters>();
-            await foreach (var version in keys.GetPropertiesOfKeyVersionsAsync(keyName, ct))
+            if (version.Enabled != true)
             {
-                if (version.Enabled != true)
-                {
-                    continue;
-                }
-                KeyVaultKey key = await keys.GetKeyAsync(keyName, version.Version, ct);
-                using var ec = key.Key.ToECDsa();
-                found[version.Version] = ec.ExportParameters(includePrivateParameters: false);
+                continue;
             }
-            _publicKeys = (found, clock.GetUtcNow());
-            return found;
+            KeyVaultKey key = await _keys.GetKeyAsync(_keyName, version.Version, ct);
+            using var ec = key.Key.ToECDsa();
+            found[version.Version] = ec.ExportParameters(includePrivateParameters: false);
         }
-        finally
-        {
-            _refresh.Release();
-        }
+        return found;
     }
 }
 

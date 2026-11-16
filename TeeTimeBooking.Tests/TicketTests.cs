@@ -121,6 +121,8 @@ public class TicketTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
         await AssertRejectedAsync(client, "not.a.ticket", "Malformed");
         await AssertRejectedAsync(client, "", "Malformed");
+        // Megabytes of dots are refused by length, before anything is split.
+        await AssertRejectedAsync(client, new string('.', 4_000_000), "Malformed");
     }
 
     private async Task<(HttpClient Client, BookingDto Booking)> BookedAsync(int players = 2)
