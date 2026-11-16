@@ -1,6 +1,9 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
+using Azure.Core;
+using Azure.Identity;
 using Azure.Monitor.OpenTelemetry.Exporter;
+using Azure.Security.KeyVault.Keys;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -13,6 +16,7 @@ using TeeTimeBooking.Api;
 using TeeTimeBooking.Api.Bookings;
 using TeeTimeBooking.Api.Data;
 using TeeTimeBooking.Api.Observability;
+using TeeTimeBooking.Api.Tickets;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +37,25 @@ builder.Services.AddDbContext<BookingDb>(o => o
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<BookingTelemetry>();
 builder.Services.AddScoped<BookingService>();
+builder.Services.AddScoped<TicketService>();
+
+// Tickets are signed in Key Vault when one is configured (Azure), otherwise with a key in memory that a restart loses.
+var ticketVault = builder.Configuration["TicketSigning:VaultUri"];
+if (!string.IsNullOrWhiteSpace(ticketVault))
+{
+    // In Azure the app's own identity, and nothing else; locally whoever `az login` signed in.
+    TokenCredential credential = builder.Environment.IsProduction()
+        ? new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned)
+        : new DefaultAzureCredential();
+    var keyName = builder.Configuration["TicketSigning:KeyName"] ?? "ticket-signing";
+    builder.Services.AddSingleton<ITicketKeys>(sp => new KeyVaultTicketKeys(
+        new KeyClient(new Uri(ticketVault), credential), credential, keyName, sp.GetRequiredService<TimeProvider>()));
+}
+else
+{
+    builder.Services.AddSingleton<LocalTicketKeys>();
+    builder.Services.AddSingleton<ITicketKeys>(sp => sp.GetRequiredService<LocalTicketKeys>());
+}
 
 var otel = builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("TeeTimeBooking.Api", serviceVersion: AppVersion.Display))
@@ -100,11 +123,17 @@ if (!app.Environment.IsEnvironment("Testing") && !buildingOpenApiDocument)
     await Seed.EnsureTeeTimesAsync(db, DateOnly.FromDateTime(DateTime.Now));
 }
 
+if (app.Environment.IsProduction() && string.IsNullOrWhiteSpace(ticketVault))
+{
+    app.Logger.LogWarning("TicketSigning:VaultUri is not set: tickets are signed with a key in memory and stop verifying on restart");
+}
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseRateLimiter();
 
 app.MapBookingEndpoints();
+app.MapTicketEndpoints();
 // Readiness (and the general health check): the database must answer.
 app.MapHealthChecks("/health");
 // Liveness: the process answers, no dependencies — a database outage must not get containers restarted.

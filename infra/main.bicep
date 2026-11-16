@@ -84,6 +84,51 @@ resource db 'Microsoft.Sql/servers/databases@2023-08-01' = {
   }
 }
 
+// Booking tickets are signed with a key that never leaves this vault. RBAC, not access policies: who may do what is
+// a role assignment like any other. Purge protection: a deleted key stays recoverable for the retention period.
+resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: 'kv-teetime-${uniqueString(resourceGroup().id)}' // vault names are global, 24 characters at most
+  location: location
+  properties: {
+    tenantId: subscription().tenantId
+    sku: { family: 'A', name: 'standard' }
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 7
+    enablePurgeProtection: true
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// EC P-256 for ES256. Rotated every 90 days; old versions stay enabled, so tickets they signed still verify.
+// Created once: deploying again neither replaces the key nor adds a version.
+resource ticketKey 'Microsoft.KeyVault/vaults/keys@2023-07-01' = {
+  parent: vault
+  name: 'ticket-signing'
+  properties: {
+    kty: 'EC'
+    curveName: 'P-256'
+    keyOps: [ 'sign', 'verify' ]
+    rotationPolicy: {
+      attributes: { expiryTime: 'P1Y' }
+      lifetimeActions: [
+        { trigger: { timeAfterCreate: 'P90D' }, action: { type: 'rotate' } }
+        { trigger: { timeBeforeExpiry: 'P30D' }, action: { type: 'notify' } }
+      ]
+    }
+  }
+}
+
+// Every read, signature and denied request, in the same workspace as the app's logs (table AzureDiagnostics).
+resource vaultAudit 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'audit-to-log-analytics'
+  scope: vault
+  properties: {
+    workspaceId: logs.id
+    logs: [ { categoryGroup: 'audit', enabled: true } ]
+  }
+}
+
 // The migration job's identity: the only one that may change the schema.
 resource migrator 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-teetime-migrator'
@@ -140,6 +185,8 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
             { name: 'OTEL_SERVICE_NAME', value: 'TeeTimeBooking.Api' }
             { name: 'Database__MigrateOnStartup', value: 'false' } // the migration job does it
             { name: 'ASPNETCORE_FORWARDEDHEADERS_ENABLED', value: 'true' } // client IP for rate limits
+            { name: 'TicketSigning__VaultUri', value: vault.properties.vaultUri }
+            { name: 'TicketSigning__KeyName', value: ticketKey.name }
           ]
           probes: [
             // The process only: a database outage must not restart containers.
@@ -153,6 +200,19 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
       ]
       scale: { minReplicas: 0, maxReplicas: 1, cooldownPeriod: 300, pollingInterval: 30 } // scale to zero; one replica caps the cost
     }
+  }
+}
+
+// The app may sign with the ticket key and read its public parts: on this key only, not the vault. The private
+// key cannot be read by anyone; the migration job gets nothing here.
+var keyVaultCryptoUser = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12338af0-0e69-4776-bea7-57ae8d297424')
+resource appSignsTickets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(ticketKey.id, app.id, keyVaultCryptoUser)
+  scope: ticketKey
+  properties: {
+    roleDefinitionId: keyVaultCryptoUser
+    principalId: app.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -234,3 +294,4 @@ resource alwaysOn 'Microsoft.Insights/metricAlerts@2018-03-01' = {
 
 output appUrl string = 'https://${app.properties.configuration.ingress.fqdn}'
 output migratorPrincipalName string = migrator.name
+output ticketVaultName string = vault.name

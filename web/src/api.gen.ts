@@ -41,6 +41,20 @@ export interface HttpValidationProblemDetails {
   errors?: Record<string, string[]>;
 }
 
+export interface JsonWebKey {
+  kty: string;
+  crv: string;
+  x: string;
+  y: string;
+  kid: string;
+  use: string;
+  alg: string;
+}
+
+export interface JsonWebKeySet {
+  keys: JsonWebKey[];
+}
+
 export interface ProblemDetails {
   type?: null | string;
   title?: null | string;
@@ -62,6 +76,28 @@ export interface TeeTimeDto {
   bookedPlayers: number;
   /** @format int32 */
   availableSpots: number;
+}
+
+export interface TicketCheckDto {
+  /** @format uuid */
+  bookingId: string;
+  /** @format int32 */
+  teeTimeId: number;
+  /** @format int32 */
+  players: number;
+  /** @format date-time */
+  startsAt: string;
+  /** @format date-time */
+  issuedAtUtc: string;
+  status: BookingStatus;
+}
+
+export interface TicketDto {
+  token: string;
+}
+
+export interface TicketToVerify {
+  token: string;
 }
 
 export interface VersionDto {

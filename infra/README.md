@@ -2,7 +2,8 @@
 
 `main.bicep` describes everything in the `rg-teetime-demo` resource group: Log Analytics, Application Insights,
 the SQL server (Entra-only) with the free-offer database, the Container Apps environment, the app, the migration
-job and its identity, and the alert that emails when the app stops scaling to zero.
+job and its identity, the Key Vault with the ticket-signing key, and the alert that emails when the app stops
+scaling to zero.
 
 ```
 # preview — changes nothing
@@ -13,6 +14,40 @@ az deployment group create  -g rg-teetime-demo -f infra/main.bicep -p infra/main
 
 Pass the image that is running (`az containerapp show -g rg-teetime-demo -n teetime-booking --query
 "properties.template.containers[0].image" -o tsv`), otherwise the deployment rolls the app back to `latest`.
+
+## The ticket-signing key
+
+The app signs booking tickets with `ticket-signing`, an EC P-256 key in `kv-teetime-<suffix>` (output
+`ticketVaultName`). After a deployment:
+
+```
+vault=$(az keyvault list -g rg-teetime-demo --query "[0].name" -o tsv)
+
+# the key and its versions; the private part cannot be shown, only the public one
+az keyvault key show --vault-name $vault -n ticket-signing --query "{kid:key.kid, crv:key.crv}"
+az keyvault key list-versions --vault-name $vault -n ticket-signing --query "[].{kid:kid, enabled:attributes.enabled}" -o table
+
+# who may use it: the app's identity, Key Vault Crypto User, on this key only
+az role assignment list --scope "$(az keyvault show -n $vault --query id -o tsv)/keys/ticket-signing" -o table
+
+# rotate now: new tickets get the new kid, old ones still verify (/.well-known/jwks.json lists both)
+az keyvault key rotate --vault-name $vault -n ticket-signing
+
+# retire a version: tickets it signed fail with reason UnknownKey once the app's key cache expires (10 minutes)
+az keyvault key set-attributes --vault-name $vault -n ticket-signing --version <version> --enabled false
+```
+
+Who did what with the key, in Log Analytics:
+
+```
+AzureDiagnostics
+| where ResourceProvider == "MICROSOFT.KEYVAULT"
+| project TimeGenerated, OperationName, ResultType, identity_claim_oid_g, CallerIPAddress
+```
+
+Your own account needs a data-plane role to run the `key` commands above (the vault uses RBAC, so being Owner of
+the resource group is not enough): `az role assignment create --role "Key Vault Crypto Officer" --assignee
+<your sign-in> --scope <vault id>`.
 
 ## Not in the template
 

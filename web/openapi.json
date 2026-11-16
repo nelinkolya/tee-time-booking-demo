@@ -233,6 +233,119 @@
         }
       }
     },
+    "/api/bookings/{id}/ticket": {
+      "get": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "A signed ticket for a confirmed booking",
+        "description": "A JWT (ES256) stating the booking, its tee time and players. Check it with `POST /api/tickets/verify`, or offline against the keys at `/.well-known/jwks.json`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tickets/verify": {
+      "post": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Check a ticket's signature and its booking's current status",
+        "description": "**422** — not a ticket signed by this service: malformed, an unknown or retired key, or a bad signature.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketToVerify"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketCheckDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/jwks.json": {
+      "get": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "The public keys tickets are signed with, one per key version",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonWebKeySet"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/version": {
       "get": {
         "tags": [
@@ -358,6 +471,55 @@
           }
         }
       },
+      "JsonWebKey": {
+        "required": [
+          "kty",
+          "crv",
+          "x",
+          "y",
+          "kid",
+          "use",
+          "alg"
+        ],
+        "type": "object",
+        "properties": {
+          "kty": {
+            "type": "string"
+          },
+          "crv": {
+            "type": "string"
+          },
+          "x": {
+            "type": "string"
+          },
+          "y": {
+            "type": "string"
+          },
+          "kid": {
+            "type": "string"
+          },
+          "use": {
+            "type": "string"
+          },
+          "alg": {
+            "type": "string"
+          }
+        }
+      },
+      "JsonWebKeySet": {
+        "required": [
+          "keys"
+        ],
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JsonWebKey"
+            }
+          }
+        }
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -430,6 +592,64 @@
           }
         }
       },
+      "TicketCheckDto": {
+        "required": [
+          "bookingId",
+          "teeTimeId",
+          "players",
+          "startsAt",
+          "issuedAtUtc",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "bookingId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "teeTimeId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "players": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "issuedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BookingStatus"
+          }
+        }
+      },
+      "TicketDto": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "TicketToVerify": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
       "VersionDto": {
         "required": [
           "version",
@@ -471,6 +691,9 @@
     },
     {
       "name": "Tee times"
+    },
+    {
+      "name": "Tickets"
     }
   ]
 }

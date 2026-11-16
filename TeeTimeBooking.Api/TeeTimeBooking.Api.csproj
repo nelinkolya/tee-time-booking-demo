@@ -41,6 +41,9 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="11.0.0" />
     <!-- Azure SQL via the managed identity. SqlClient 7 moved Entra ID authentication into this package. -->
     <PackageReference Include="Microsoft.Data.SqlClient.Extensions.Azure" Version="7.1.1" />
+    <!-- Booking tickets are signed with a key in Key Vault, as the app's managed identity. -->
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Azure.Security.KeyVault.Keys" Version="4.10.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
