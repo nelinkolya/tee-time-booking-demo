@@ -49,7 +49,7 @@ not `Guid.NewGuid()`: new rows append to the last page instead of splitting rand
 with SQL Server's own `ORDER BY Id` — .NET and SQL Server sort GUIDs differently, which is also why
 `Guid.CreateVersion7()` would not help here.
 
-## Tests — 44, against a real SQL Server
+## Tests — 45, against a real SQL Server
 
 Concurrency bugs don't show up against an in-memory provider, so the suite runs against SQL Server and fires
 requests through the real HTTP pipeline, all released at once from one gate.
@@ -67,6 +67,7 @@ requests through the real HTTP pipeline, all released at once from one gate.
 | booking status on the wire | a name (`"Cancelled"`), as the UI compares it |
 | **naive check-then-insert** | **overbooks a 4-ball to 6 players** — why the service doesn't do that |
 | DB check constraint | rejects a counter above capacity |
+| API compiled with .NET 11 runtime async | no compiler state machine on `BookAsync`: the `runtime-async=on` switch is still there |
 | **load:** 1,000 requests at once on one 4-ball | exactly 4 × `201`, 996 × `409` (~0.5 s) |
 | **load:** 1,100 requests over 100 tee times, every 10th sent twice with the same key | no slot over capacity, counters match bookings, no key booked twice |
 
