@@ -1,0 +1,64 @@
+name: AI review
+
+# Claude reads each pull request and comments on it. Advisory only: not a required check, never pushes,
+# and a model's verdict varies run to run, so the tests and CodeQL stay the gate for main.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Claude review
+    # Pull requests from forks get no secrets; drafts are not ready for review.
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    # A newer push replaces the review of the older one.
+    concurrency:
+      group: ai-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write # the Claude GitHub App's token is issued for this run via OIDC
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      # Third-party action with access to a secret: pinned to a commit.
+      - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request. The branch is checked out in the working directory; read README.md
+            first: it states what this project guarantees and how.
+
+            The project is a tee-time booking API (ASP.NET Core 10, EF Core 10, SQL Server) with a React UI.
+            Its one promise: however requests race or repeat, a tee time never holds more players than it
+            has spots, and one booking attempt never becomes two bookings. Weigh every change against it:
+            - the conditional UPDATE that checks and claims capacity in one statement, and the transaction
+              around it; any read-then-write that reopens the race
+            - idempotency keys: the unique index, replay of the stored result, a reused key with a different
+              request
+            - EF Core: migrations that match the model, queries that load more than they need
+            - HTTP status codes and the OpenAPI contract the UI's types are generated from
+            - React: hook dependencies, stale state after a request, error states the user never sees
+            - tests that would still pass if the change were wrong
+
+            Report only real problems: a bug, a race, a security hole, a broken contract, a missing test for
+            changed behaviour. No praise, no style remarks the linters already cover, no summary of the diff.
+            Put each problem as an inline comment on its line with
+            mcp__github_inline_comment__create_inline_comment (confirmed: true): what goes wrong, with which
+            input, and the fix. Then post one top-level comment with gh pr comment: the count of problems
+            found, or a single line saying none were.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
+            --max-turns 30
