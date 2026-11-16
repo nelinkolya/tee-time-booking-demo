@@ -41,7 +41,7 @@ jobs:
             Review this pull request. The branch is checked out in the working directory; read README.md
             first: it states what this project guarantees and how.
 
-            The project is a tee-time booking API (ASP.NET Core 10, EF Core 10, SQL Server) with a React UI.
+            The project is a tee-time booking API (ASP.NET Core 11, EF Core 11, SQL Server) with a React UI.
             Its one promise: however requests race or repeat, a tee time never holds more players than it
             has spots, and one booking attempt never becomes two bookings. Weigh every change against it:
             - the conditional UPDATE that checks and claims capacity in one statement, and the transaction
